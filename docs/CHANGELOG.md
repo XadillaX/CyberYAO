@@ -6,6 +6,8 @@
 
 ## Unreleased
 
+## v1.0.0 - 2026-09-05
+
 - Completed the standalone CyberYAO experience with an initialization scene, pseudo-3D shell and coin animation, continuous ambient audio, synchronized coin sounds, and one scrollable document per original or changed hexagram with complete texts and Zhu Xi primary-reading markers.
 - Extended the traditional three-coin method into a complete six-cast sequence from the first line to the top line. Each cast stores a 6/7/8/9 line, Confirm advances to the next line, and the sixth line resolves through an accurate upper/lower-trigram mapping to one of all 64 primary hexagrams, its original judgment, and the changed hexagram produced by old yin/yang lines. The shared LVGL bottom panel continuously shows the six-line progress, moving-line marks, primary and changed hexagrams without exposing the randomness source; host tests cover the six-step state flow, all four line types, and every King Wen number/name mapping.
 - Reworked the Yaogui hardware random source so every cast briefly starts the ESP32-C3 Wi-Fi radio in STA mode, waits for entropy to stabilize, obtains three result bits with `esp_fill_random`, then stops and deinitializes the radio. It creates no network interface, performs no scan, and makes no connection. Removed HTTP, remote random sources, credentials, NVS, and SoftAP provisioning; startup now enters the ready screen, holding `DOWN` no longer provisions, and any radio lifecycle failure reports an error without fallback. The simulator retains asynchronous mocked success and failure modes.

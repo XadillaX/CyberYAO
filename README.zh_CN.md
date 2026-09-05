@@ -4,6 +4,9 @@
 
 # CyberYAO
 
+[![CI](https://github.com/XadillaX/CyberYAO/actions/workflows/ci.yml/badge.svg)](https://github.com/XadillaX/CyberYAO/actions/workflows/ci.yml)
+[![Release](https://github.com/XadillaX/CyberYAO/actions/workflows/build-firmware.yml/badge.svg)](https://github.com/XadillaX/CyberYAO/actions/workflows/build-firmware.yml)
+
 CyberYAO 是为 FoloToy AI Passport 开发的离线六爻应用。三枚铜钱连续投掷六次，
 从初爻向上生成本卦、动爻与之卦；完整收录六十四卦卦辞、三百八十四条爻辞，以及
 乾卦用九和坤卦用六。
