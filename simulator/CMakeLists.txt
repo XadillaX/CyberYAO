@@ -8,9 +8,13 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(ROOT_DIR "${CMAKE_CURRENT_LIST_DIR}/..")
 set(LVGL_DIR "${ROOT_DIR}/managed_components/lvgl__lvgl")
 set(VIEW_DIR "${ROOT_DIR}/components/yaogui_view")
+set(GENERATED_DIR "${ROOT_DIR}/generated")
 
 if(NOT EXISTS "${LVGL_DIR}/lvgl.h")
     message(FATAL_ERROR "缺少 managed_components/lvgl__lvgl，请先执行一次固件依赖解析")
+endif()
+if(NOT EXISTS "${GENERATED_DIR}/yaogui_font_14.c")
+    message(FATAL_ERROR "缺少 generated/ 资源，请先执行 python3 tools/generate_assets.py")
 endif()
 
 find_package(PkgConfig REQUIRED)
@@ -29,15 +33,14 @@ add_executable(yaogui_simulator
     "${VIEW_DIR}/ui_pixel.c"
     "${VIEW_DIR}/yaogui_logic.c"
     "${VIEW_DIR}/yaogui_text_data.c"
-    "${VIEW_DIR}/yaogui_font_14.c"
-    "${VIEW_DIR}/yaogui_font_16.c"
-    "${VIEW_DIR}/yaogui_classic_14.c"
-    "${VIEW_DIR}/yaogui_mifu_18.c"
-    "${VIEW_DIR}/yaogui_coin_sound.c"
-    "${VIEW_DIR}/yaogui_ambient_sound.c"
-    "${VIEW_DIR}/yaogui_shell_images.c"
-    "${VIEW_DIR}/yaogui_coin_images.c"
-    "${VIEW_DIR}/yaogui_table_image.c"
+    "${GENERATED_DIR}/yaogui_font_14.c"
+    "${GENERATED_DIR}/yaogui_classic_14.c"
+    "${GENERATED_DIR}/yaogui_mifu_18.c"
+    "${GENERATED_DIR}/yaogui_coin_sound.c"
+    "${GENERATED_DIR}/yaogui_ambient_sound.c"
+    "${GENERATED_DIR}/yaogui_shell_images.c"
+    "${GENERATED_DIR}/yaogui_coin_images.c"
+    "${GENERATED_DIR}/yaogui_table_image.c"
     "${VIEW_DIR}/yaogui_view.c"
 )
 target_include_directories(yaogui_simulator PRIVATE

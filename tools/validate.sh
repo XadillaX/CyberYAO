@@ -5,7 +5,11 @@ mode="${1:---all}"
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 
 usage() {
-    echo "Usage: $0 [--all|--static|--firmware]" >&2
+    echo "Usage: $0 [--all|--generated|--static|--firmware]" >&2
+}
+
+run_generated_checks() {
+    python3 tools/generate_assets.py --check
 }
 
 run_static_checks() {
@@ -66,10 +70,15 @@ run_firmware_checks() (
 cd "${repo_root}"
 case "${mode}" in
     --all)
+        run_generated_checks
         run_static_checks
         run_firmware_checks
         ;;
+    --generated)
+        run_generated_checks
+        ;;
     --static)
+        run_generated_checks
         run_static_checks
         ;;
     --firmware)

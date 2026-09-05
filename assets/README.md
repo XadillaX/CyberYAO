@@ -10,7 +10,17 @@ Keep each asset in the matching subdirectory and document its destination, namin
 
 ## Fonts
 
-Store reusable font files and generated font sources in `fonts/`.
+`fonts/` contains only the four source fonts used by the UI:
+`fusion-pixel-12px-proportional-zh_hans.otf`, `xique-guzidian.ttf`, and
+`xique-zaishanlin.ttf`, plus `source-han-sans-sc-normal.otf` for the seven
+historical glyphs missing from Fusion Pixel.
+
+Fusion Pixel is distributed under the SIL Open Font License 1.1. Its license
+and the upstream component-font licenses are retained in
+`fonts/licenses/fusion-pixel/`; the Source Han Sans license is retained in
+`fonts/licenses/source-han-sans-sc/`. The two Xique fonts are original design
+assets provided to this project; downstream distributors must verify their
+own redistribution rights.
 
 - Use descriptive names that include the family, weight, size, and format when relevant.
 - Document the source, license, character range, conversion command, and expected destination.
@@ -19,7 +29,8 @@ Store reusable font files and generated font sources in `fonts/`.
 
 ## Images
 
-Store reusable source images and generated display assets in `images/`.
+Store only reusable source images in `images/`; generated display assets belong
+in the ignored top-level `generated/` directory.
 
 - Use descriptive names and document dimensions, pixel format, conversion steps, and destination.
 - Prefer formats suitable for the 240 × 320 RGB565 display and account for Flash and internal RAM.
@@ -42,12 +53,17 @@ landing sound.
 | Source | Purpose | Firmware resource |
 | --- | --- | --- |
 | `images/bagua_table_user.png` | User-selected table artwork | `yaogui_table_image.c` |
-| `images/bagua_table_214.png` | Feathered and precomposited display image | `yaogui_table_image.c` |
 | `images/coin_front.png`, `coin_back.png` | Coin faces | `yaogui_coin_images.c` |
 | `images/yaogui_shell_faces.jpg` | Turtle-shell source image | `yaogui_shell_images.c` |
 | `audio/coin_ritual.wav` | Shaking, rolling, and landing sound | `yaogui_coin_sound.c` |
 | `audio/ambient_divination.wav` | Six-second ambient loop | `yaogui_ambient_sound.c` |
+| `fonts/fusion-pixel-12px-proportional-zh_hans.otf` | Body text | `yaogui_font_14.c` |
+| `fonts/source-han-sans-sc-normal.otf` | Seven historical body-text fallbacks | `yaogui_font_14.c` |
+| `fonts/xique-guzidian.ttf` | Classical headings | `yaogui_classic_14.c` |
+| `fonts/xique-zaishanlin.ttf` | Hexagram result names | `yaogui_mifu_18.c` |
 
-Generated C arrays are compiled directly into firmware and simulator builds.
-The source images and WAV files remain available for review and regeneration;
-the application does not read them from a runtime filesystem.
+Install the versions pinned in `package-lock.json` and
+`requirements-assets.txt`, then run `python3 tools/generate_assets.py`.
+Generated C arrays are written to ignored `generated/` and compiled directly
+into firmware and simulator builds. Use `./tools/validate.sh --generated` to
+verify that regeneration is deterministic.

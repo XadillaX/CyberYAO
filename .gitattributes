@@ -6,11 +6,7 @@
 *.webp binary
 *.wav binary
 *.bin binary
+*.ttf binary
+*.otf binary
 
-components/yaogui_view/yaogui_*_sound.c linguist-generated=true
-components/yaogui_view/yaogui_*_images.c linguist-generated=true
-components/yaogui_view/yaogui_*_image.c linguist-generated=true
-components/yaogui_view/yaogui_font_*.c linguist-generated=true
-components/yaogui_view/yaogui_mifu_*.c linguist-generated=true
-components/yaogui_view/yaogui_classic_*.c linguist-generated=true
 components/yaogui_view/yaogui_text_data.c linguist-generated=true

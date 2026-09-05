@@ -21,6 +21,12 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
+      - name: Generate reproducible assets
+        run: |
+          npm ci --ignore-scripts
+          python3 -m pip install -r requirements-assets.txt
+          python3 tools/generate_assets.py
+
       - name: Install verified actionlint
         run: |
           actionlint_bin="$(./tools/install-actionlint.sh "$RUNNER_TEMP/actionlint")"
@@ -34,6 +40,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Generate reproducible assets
+        run: |
+          npm ci --ignore-scripts
+          python3 -m pip install -r requirements-assets.txt
+          python3 tools/generate_assets.py
 
       - name: Restore ccache
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5

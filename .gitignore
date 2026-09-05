@@ -21,6 +21,7 @@ __pycache__/
 .pytest_cache/
 .venv/
 node_modules/
+/generated/
 
 # LVGL SDL simulator
 /simulator/build/

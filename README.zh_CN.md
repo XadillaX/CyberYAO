@@ -55,10 +55,11 @@ CyberYAO 是为 FoloToy AI Passport 开发的离线六爻应用。三枚铜钱�
 
 ```text
 components/bsp/          AI Passport 板级驱动
-components/yaogui_view/  六爻逻辑、LVGL 界面和生成资源
+components/yaogui_view/  六爻逻辑、LVGL 界面和资源声明
 main/                    固件入口与硬件任务
 simulator/               macOS LVGL + SDL2 模拟器
-assets/                  可编辑图片与音频源文件
+assets/                  实际使用的图片、音频与字体源文件
+generated/               本机生成且不提交的 LVGL C 资源
 tests/                   主机逻辑与固件验证
 tools/                   资源生成和统一验证脚本
 docs/                    开发、硬件与发布文档
@@ -69,6 +70,10 @@ docs/                    开发、硬件与发布文档
 固件使用 ESP-IDF `v5.5.3`：
 
 ```bash
+npm ci --ignore-scripts
+python3 -m venv .venv
+.venv/bin/pip install -r requirements-assets.txt
+.venv/bin/python tools/generate_assets.py
 idf.py set-target esp32c3
 idf.py build
 idf.py -p /dev/cu.usbmodem2101 flash monitor
@@ -87,6 +92,7 @@ brew install sdl2 pkg-config
 ## 验证
 
 ```bash
+./tools/validate.sh --generated
 ./tools/validate.sh --static
 ./tools/validate.sh --firmware
 ./simulator/run.sh --smoke-test

@@ -1,0 +1,9 @@
+{
+  "name": "cyberyao-assets",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Pinned build-time dependencies for CyberYAO assets",
+  "devDependencies": {
+    "lv_font_conv": "1.5.3"
+  }
+}
