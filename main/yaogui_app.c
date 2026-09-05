@@ -8,6 +8,7 @@
 #include "bsp_display.h"
 #include "esp_log.h"
 #include "esp_random.h"
+#include "esp_system.h"
 #include "esp_timer.h"
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
@@ -187,6 +188,15 @@ static void process_key(const key_event_t* key) {
   if (s_backlight_dimmed) {
     bsp_display_backlight(100);
     s_backlight_dimmed = false;
+  }
+  /*
+   * 继续按住上键经过软件重启后，Bootloader 会执行既有的五秒长按检测，
+   * 随后直接加载永久 Recovery。这里不复制 Recovery 的私有 BLE 刷机协议。
+   */
+  if (key->button == BSP_BTN_UP && key->event == BSP_BTN_LONG) {
+    ESP_LOGI(TAG, "上键持续按住：重启并进入永久 Recovery");
+    esp_restart();
+    return;
   }
   if (s_model.reading.open && key->event == BSP_BTN_CLICK) {
     if (key->button == BSP_BTN_UP && yaogui_view_reading_scroll(s_view, -1)) {
