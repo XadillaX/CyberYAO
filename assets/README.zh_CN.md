@@ -24,11 +24,26 @@
 - 许可允许时保留可编辑源文件，并记录来源与许可。
 - 图片中不得包含设备二维码秘密、凭证或个人数据。
 
-## 音乐与音效（music）
+## 音乐与音效（audio）
 
-可复用的音乐与音效源码放在 `music/`。
+可复用的音乐与音效源码放在 `audio/`。当前包含持续循环的古朴卜卦环境音，以及
+龟壳摇动、铜钱翻滚和落地音效。
 
 - 记录来源、许可、采样率、位深、声道、转换命令与目标路径。
-- 与当前 BSP 音频路径匹配时优先采用 16 kHz、16 位单声道 PCM。
+- 当前 BSP 音频路径使用 32 kHz、16 位单声道 PCM。
 - 嵌入音频前评估 Flash 与内部 RAM 成本；长录音应流式或分块。
 - 无再分发许可不提交媒体文件。
+
+## 当前资源
+
+| 源文件 | 用途 | 固件资源 |
+| --- | --- | --- |
+| `images/bagua_table_user.png` | 用户选定的八卦桌原图 | `yaogui_table_image.c` |
+| `images/bagua_table_214.png` | 羽化并预合成后的屏幕图 | `yaogui_table_image.c` |
+| `images/coin_front.png`、`coin_back.png` | 铜钱正反面 | `yaogui_coin_images.c` |
+| `images/yaogui_shell_faces.jpg` | 龟壳源图 | `yaogui_shell_images.c` |
+| `audio/coin_ritual.wav` | 摇动、翻滚与落地声 | `yaogui_coin_sound.c` |
+| `audio/ambient_divination.wav` | 六秒古朴环境循环 | `yaogui_ambient_sound.c` |
+
+生成后的 C 数组会直接编入固件和模拟器。源图与 WAV 用于审阅和重新生成，不在运行时
+从文件系统读取。

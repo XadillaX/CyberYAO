@@ -40,6 +40,29 @@ cc -std=c11 -Wall -Wextra -Werror -Imain \
 /tmp/test_ui_pixel_math
 ```
 
+摇龟逻辑测试可独立运行：
+
+```bash
+cc -std=c11 -Wall -Wextra -Werror -Icomponents/yaogui_view/include \
+  tests/test_yaogui_logic.c components/yaogui_view/yaogui_logic.c \
+  -o /tmp/test_yaogui_logic
+/tmp/test_yaogui_logic
+```
+
+该测试覆盖三枚铜钱到阴阳爻的映射、完整六爻流程、全部 64 卦映射，以及伪 3D
+运动的以下约束：
+
+- 相同种子产生相同的起点、速度、高度、角速度与落点，便于复现问题；
+- Mock 随机结果到达前始终处于运动阶段，动画帧不参与占卜结果；
+- 三枚龟甲按错峰时序弹跳落地，最终位置互不重叠；
+- 最终正反面只取自随机源结果；
+- 运动中的透视缩放、翻面压缩与阴影参数始终位于有效范围。
+
+真机验收还应确认每次投掷都完整执行 Wi-Fi STA 射频
+`init → start → esp_fill_random → stop → deinit`，且不创建网络连接。射频生命周期
+任一步骤失败时必须直接进入错误页，不得使用回退随机源。检查中文标题和状态文案无
+缺字，并确认铜钱图像边缘透明、阴影不遮挡结果爻线。
+
 统一验证入口：
 
 ```bash

@@ -1,6 +1,35 @@
-build/
-sdkconfig
-sdkconfig.old
-managed_components/
+# ESP-IDF / CMake
+/build/
+/managed_components/
+/sdkconfig
+/sdkconfig.old
+/compile_commands.json
+/cmake-build-*/
+
+# macOS / IDE
+.DS_Store
+**/.DS_Store
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
+
+# Python / Node.js
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+node_modules/
+
+# LVGL SDL simulator
+/simulator/build/
+/simulator/*.png
+/simulator/*.ppm
+/simulator/*.bmp
+
+# Logs and local configuration
+*.log
+.env
+.env.*
+!.env.example

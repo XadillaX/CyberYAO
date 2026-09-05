@@ -43,6 +43,33 @@ cc -std=c11 -Wall -Wextra -Werror -Imain \
 /tmp/test_ui_pixel_math
 ```
 
+The Yaogui logic tests can also run independently:
+
+```bash
+cc -std=c11 -Wall -Wextra -Werror -Icomponents/yaogui_view/include \
+  tests/test_yaogui_logic.c components/yaogui_view/yaogui_logic.c \
+  -o /tmp/test_yaogui_logic
+/tmp/test_yaogui_logic
+```
+
+This suite covers three-coin line mapping, the complete six-cast flow, all 64
+hexagram mappings, and these pseudo-3D motion invariants:
+
+- identical seeds reproduce starting positions, velocities, heights, angular
+  velocities, and landing positions;
+- shells keep moving until a mocked random result arrives, and animation frames
+  never determine the divination result;
+- shells bounce and land with staggered timing at non-overlapping positions;
+- final face values come only from the random-source result;
+- perspective, flip compression, and shadow values stay in valid ranges.
+
+On hardware, confirm that every cast completes the Wi-Fi STA radio
+`init → start → esp_fill_random → stop → deinit` lifecycle without creating a
+network connection. Any lifecycle failure must go directly to the error screen
+without a fallback random source. Also verify that Chinese device text has no
+missing glyphs, coin edges are transparent, and shadows do not obscure the
+result line.
+
 Use the unified validation entry point:
 
 ```bash

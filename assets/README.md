@@ -28,9 +28,26 @@ Store reusable source images and generated display assets in `images/`.
 
 ## Music and sound effects
 
-Store reusable music and sound-effect sources in `music/`.
+Store reusable music and sound-effect sources in `audio/`. The current assets
+include a looping divination ambience and the shell-shaking, coin-motion, and
+landing sound.
 
 - Document the source, license, sample rate, bit depth, channels, conversion command, and destination.
-- Prefer 16 kHz, 16-bit mono PCM when it matches the current BSP audio path.
+- The current BSP audio path uses 32 kHz, 16-bit mono PCM.
 - Check Flash and internal-RAM cost before embedding audio; stream or chunk long recordings.
 - Do not commit media without redistribution permission.
+
+## Current assets
+
+| Source | Purpose | Firmware resource |
+| --- | --- | --- |
+| `images/bagua_table_user.png` | User-selected table artwork | `yaogui_table_image.c` |
+| `images/bagua_table_214.png` | Feathered and precomposited display image | `yaogui_table_image.c` |
+| `images/coin_front.png`, `coin_back.png` | Coin faces | `yaogui_coin_images.c` |
+| `images/yaogui_shell_faces.jpg` | Turtle-shell source image | `yaogui_shell_images.c` |
+| `audio/coin_ritual.wav` | Shaking, rolling, and landing sound | `yaogui_coin_sound.c` |
+| `audio/ambient_divination.wav` | Six-second ambient loop | `yaogui_ambient_sound.c` |
+
+Generated C arrays are compiled directly into firmware and simulator builds.
+The source images and WAV files remain available for review and regeneration;
+the application does not read them from a runtime filesystem.

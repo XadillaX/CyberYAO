@@ -25,36 +25,14 @@ lv_obj_t *ui_pixel_label(lv_obj_t *parent, const char *text,
     return label;
 }
 
-static void add_cloud(lv_obj_t *parent, int x, int y)
-{
-    block(parent, x + 1, y + 7, 43, 10, UI_INK);
-    block(parent, x + 5, y + 4, 35, 10, 0xFFFFFF);
-    block(parent, x + 12, y, 10, 9, 0xFFFFFF);
-    block(parent, x + 27, y + 1, 9, 8, 0xFFFFFF);
-}
-
 lv_obj_t *ui_pixel_screen_create(const char *title)
 {
+    (void)title;
     lv_obj_t *scr = lv_obj_create(NULL);
     lv_obj_remove_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_bg_color(scr, lv_color_hex(UI_SKY), 0);
+    lv_obj_set_style_bg_color(scr, lv_color_hex(0xE8D7B4), 0);
     lv_obj_set_style_border_width(scr, 0, 0);
     lv_obj_set_style_pad_all(scr, 0, 0);
-
-    add_cloud(scr, 188, 8);
-    block(scr, 0, 286, 240, 34, UI_GRASS);
-    block(scr, 0, 286, 240, 4, 0xA7D93E);
-    for (int x = 0; x < 240; x += 30) {
-        block(scr, x, 312, 18, 8, UI_GRASS_DARK);
-        block(scr, x + 18, 316, 12, 4, 0x75452E);
-    }
-
-    block(scr, 9, 12, 151, 33, UI_INK);
-    lv_obj_t *plate = block(scr, 5, 8, 151, 33, UI_PAPER);
-    lv_obj_set_style_border_color(plate, lv_color_hex(UI_INK), 0);
-    lv_obj_set_style_border_width(plate, 3, 0);
-    lv_obj_t *heading = ui_pixel_label(plate, title, &lv_font_montserrat_20, UI_INK);
-    lv_obj_center(heading);
     return scr;
 }
 
