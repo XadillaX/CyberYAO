@@ -5,7 +5,6 @@
 #include "bsp_i2c.h"
 #include "bsp_pins.h"
 #include "esp_log.h"
-#include "fap_screenshot.h"
 #include "yaogui_app.h"
 
 static const char* TAG = "main";
@@ -39,9 +38,6 @@ void app_main(void) {
     ESP_LOGE(TAG, "龟壳应用启动失败: %s", esp_err_to_name(err));
     return;
   }
-  // UI 完整就绪后再监听，确保协议抓取的是当前应用页面。
-  fap_screenshot_start();
-
   err = bsp_button_init(yaogui_app_key, NULL);
   if (err != ESP_OK) {
     ESP_LOGE(TAG, "按键初始化失败: %s", esp_err_to_name(err));
