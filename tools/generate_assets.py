@@ -21,6 +21,7 @@ ASSETS = ROOT / "assets"
 GENERATED = ROOT / "generated"
 VIEW = ROOT / "components" / "yaogui_view"
 FONT_CONV = ROOT / "node_modules" / ".bin" / "lv_font_conv"
+UI_SYMBOLS = "·↑↓☰☱☲☳☴☵☶☷（），：；？"
 OUTPUTS = (
     "yaogui_font_14.c",
     "yaogui_classic_14.c",
@@ -291,7 +292,11 @@ def generate(output_dir: Path) -> None:
         "yaogui_ambient_sound",
         "yaogui_ambient_sound.h",
     )
-    all_chars = "".join(chr(value) for value in range(32, 127)) + source_characters()
+    all_chars = (
+        "".join(chr(value) for value in range(32, 127))
+        + source_characters()
+        + UI_SYMBOLS
+    )
     names = hexagram_names()
     write_font(
         output_dir,
