@@ -22,6 +22,15 @@ GENERATED = ROOT / "generated"
 VIEW = ROOT / "components" / "yaogui_view"
 FONT_CONV = ROOT / "node_modules" / ".bin" / "lv_font_conv"
 UI_SYMBOLS = "·↑↓☰☱☲☳☴☵☶☷（），：；？"
+CLASSIC_UI_TEXT = (
+    "本卦全文"
+    "本卦爻辞"
+    "之卦全文"
+    "之卦爻辞"
+    "用九用六"
+    "解读"
+    "一二三四五六七八九十第卦变启坛卜"
+)
 OUTPUTS = (
     "yaogui_font_14.c",
     "yaogui_classic_14.c",
@@ -314,7 +323,7 @@ def generate(output_dir: Path) -> None:
         "xique-guzidian.ttf",
         14,
         4,
-        names + "·一二三四五六七八九十第卦本变爻辞启坛卜",
+        names + "·" + CLASSIC_UI_TEXT,
     )
     write_font(
         output_dir,
