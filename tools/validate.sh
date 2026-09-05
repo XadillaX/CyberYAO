@@ -17,6 +17,7 @@ run_static_checks() {
     local test_dir
 
     python3 tools/check_repo.py
+    ./tools/lint-c.sh
 
     actionlint_bin="${ACTIONLINT_BIN:-}"
     if [[ -z "${actionlint_bin}" ]]; then

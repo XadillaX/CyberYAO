@@ -6,6 +6,8 @@
 
 ## Unreleased
 
+- 新增可复现的 C/H lint：沿用 libkagerou 的 `clang-format` 与 cpplint 配置，精确锁定 Node 包 `clang-format` 1.6.0 和 `cpplint.js` 1.0.0；只选择仓库跟踪的自有手写源码，排除 managed、generated、build 产物与 `yaogui_text_data.c`，并接入 `validate.sh --static` 和 GitHub CI。同步格式化并修复维护中的源码，不改变行为。
+
 ## v1.0.0 - 2026-09-05
 
 - 重构图片、音频和字体资源链路：仓库仅保留实际使用的原始素材、许可证与锁定依赖的生成脚本，生成的 LVGL C 数组统一写入被忽略的 `generated/`；固件、模拟器与 CI 从同一套输入重建资源，并强制校验全部卦爻辞字形。

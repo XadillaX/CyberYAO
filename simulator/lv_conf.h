@@ -1,4 +1,4 @@
-#ifndef LV_CONF_H
+#ifndef LV_CONF_H  // NOLINT(build/header_guard)
 #define LV_CONF_H
 
 #define LV_COLOR_DEPTH 32
@@ -18,4 +18,4 @@
 #define LV_LOG_LEVEL LV_LOG_LEVEL_WARN
 #define LV_USE_SNAPSHOT 1
 
-#endif
+#endif  // LV_CONF_H  // NOLINT(build/header_guard)

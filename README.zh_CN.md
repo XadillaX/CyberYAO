@@ -92,11 +92,20 @@ brew install sdl2 pkg-config
 ## 验证
 
 ```bash
+npm ci --ignore-scripts
+npm run lint:c
+# 仅在需要修复格式时运行：
+npm run format:c
 ./tools/validate.sh --generated
 ./tools/validate.sh --static
 ./tools/validate.sh --firmware
 ./simulator/run.sh --smoke-test
 ```
+
+`lint:c` 使用锁定的 `clang-format` 1.6.0 与 `cpplint.js` 1.0.0，
+检查仓库跟踪的自有手写 C/H 文件；不检查 `managed_components/`、
+`generated/`、`build/` 和生成文件 `yaogui_text_data.c`。`--static`
+与 GitHub CI 会执行同一检查。
 
 主机测试覆盖三钱映射、六爻状态流转、六十四卦映射、朱熹主读规则、动画确定性和
 完整阅读页。射频熵源与音频硬件仍需在 AI Passport 真机上验收。

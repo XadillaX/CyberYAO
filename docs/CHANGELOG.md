@@ -6,6 +6,8 @@
 
 ## Unreleased
 
+- Added reproducible C/H linting with the libkagerou `clang-format` and cpplint configurations, exact Node package pins for `clang-format` 1.6.0 and `cpplint.js` 1.0.0, a tracked-source selector that excludes managed/generated/build output and `yaogui_text_data.c`, and enforcement through `validate.sh --static` and GitHub CI. Reformatted and lint-fixed maintained sources without changing behavior.
+
 ## v1.0.0 - 2026-09-05
 
 - Reworked the image, audio, and font pipeline so the repository keeps only used source assets, licenses, and dependency-locked generators. Generated LVGL C arrays now live in ignored `generated/`; firmware, simulator, and CI builds regenerate them from the same inputs and reject missing text glyphs.

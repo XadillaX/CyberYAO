@@ -3,7 +3,13 @@
   "private": true,
   "version": "1.0.0",
   "description": "Pinned build-time dependencies for CyberYAO assets",
+  "scripts": {
+    "format:c": "./tools/lint-c.sh --fix",
+    "lint:c": "./tools/lint-c.sh"
+  },
   "devDependencies": {
+    "clang-format": "1.6.0",
+    "cpplint.js": "1.0.0",
     "lv_font_conv": "1.5.3"
   }
 }
