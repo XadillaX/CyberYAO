@@ -1,5 +1,5 @@
 <p align="right">
-  <strong>简体中文</strong> · <a href="README.md">English</a>
+  <strong>简体中文</strong> · <a href="README.md">默认入口</a>
 </p>
 
 # CyberYAO

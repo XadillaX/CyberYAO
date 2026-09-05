@@ -102,13 +102,16 @@ def check_markdown_links(files: list[Path], errors: list[str]) -> None:
 
 
 def check_document_languages(files: list[Path], errors: list[str]) -> None:
-    """Require an English default and a linked Simplified Chinese peer."""
+    """Require bilingual docs; CyberYAO's root product README defaults to Chinese."""
     markdown = {path.resolve() for path in files if path.suffix.lower() == ".md"}
+    root_readme = (ROOT / "README.md").resolve()
 
     for path in sorted(markdown):
         name = path.name
         text = path.read_text(encoding="utf-8")
         opening = "\n".join(text.splitlines()[:8])
+        if path == root_readme:
+            continue
 
         if name.endswith(".zh_CN.md"):
             default_name = f"{name[:-len('.zh_CN.md')]}.md"
