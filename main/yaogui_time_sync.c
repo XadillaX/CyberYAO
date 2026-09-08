@@ -50,8 +50,7 @@ static int current_time_access(uint16_t connection,
   }
   uint8_t value[10];
   uint16_t length = 0;
-  int result =
-      ble_hs_mbuf_to_flat(context->om, value, sizeof(value), &length);
+  int result = ble_hs_mbuf_to_flat(context->om, value, sizeof(value), &length);
   if (result != 0 || length != sizeof(value)) {
     return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
   }
@@ -102,8 +101,7 @@ static const struct ble_gatt_svc_def TIME_SERVICES[] = {
                     .uuid =
                         BLE_UUID16_DECLARE(CURRENT_TIME_CHARACTERISTIC_UUID),
                     .access_cb = current_time_access,
-                    .flags =
-                        BLE_GATT_CHR_F_WRITE | BLE_GATT_CHR_F_WRITE_NO_RSP,
+                    .flags = BLE_GATT_CHR_F_WRITE | BLE_GATT_CHR_F_WRITE_NO_RSP,
                 },
                 {0},
             },
@@ -113,8 +111,7 @@ static const struct ble_gatt_svc_def TIME_SERVICES[] = {
 
 static int advertise_time_service(void) {
   struct ble_hs_adv_fields fields = {0};
-  const ble_uuid16_t service =
-      BLE_UUID16_INIT(CURRENT_TIME_SERVICE_UUID);
+  const ble_uuid16_t service = BLE_UUID16_INIT(CURRENT_TIME_SERVICE_UUID);
   fields.flags = BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP;
   fields.uuids16 = (ble_uuid16_t*)&service;
   fields.num_uuids16 = 1;
@@ -133,12 +130,8 @@ static int advertise_time_service(void) {
   struct ble_gap_adv_params parameters = {0};
   parameters.conn_mode = BLE_GAP_CONN_MODE_UND;
   parameters.disc_mode = BLE_GAP_DISC_MODE_GEN;
-  return ble_gap_adv_start(s_ble_addr_type,
-                           NULL,
-                           BLE_HS_FOREVER,
-                           &parameters,
-                           ble_gap_event,
-                           NULL);
+  return ble_gap_adv_start(
+      s_ble_addr_type, NULL, BLE_HS_FOREVER, &parameters, ble_gap_event, NULL);
 }
 
 static int ble_gap_event(struct ble_gap_event* event, void* arg) {
@@ -190,8 +183,7 @@ static void start_sntp(void) {
   if (s_sntp_started) return;
   setenv("TZ", "CST-8", 1);
   tzset();
-  esp_sntp_config_t config =
-      ESP_NETIF_SNTP_DEFAULT_CONFIG("ntp.aliyun.com");
+  esp_sntp_config_t config = ESP_NETIF_SNTP_DEFAULT_CONFIG("ntp.aliyun.com");
   config.start = true;
   esp_err_t error = esp_netif_sntp_init(&config);
   if (error == ESP_OK) {
@@ -239,8 +231,7 @@ static void ip_event(void* arg,
 esp_err_t yaogui_time_sync_start(void) {
   esp_err_t error = nvs_flash_init();
   if (error != ESP_OK) {
-    ESP_LOGE(TAG, "NVS 初始化失败，未擦除现有数据: %s",
-             esp_err_to_name(error));
+    ESP_LOGE(TAG, "NVS 初始化失败，未擦除现有数据: %s", esp_err_to_name(error));
     return error;
   }
   error = start_ble_time_service();
