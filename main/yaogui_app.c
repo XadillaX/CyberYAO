@@ -25,6 +25,7 @@ static const char* TAG = "yaogui";
 
 #define ENTROPY_STABILIZE_MS 100U
 #define APP_IDLE_DIM_MS 30000U
+#define APP_STANDBY_OFF_MS 30000U
 #define BATTERY_REFRESH_MS 30000U
 #define TIME_SYNC_TIMEOUT_MS 30000U
 #define TIME_SYNC_RESULT_MS 2000U
@@ -58,7 +59,9 @@ static uint32_t s_battery_read_ms;
 static bool s_battery_read;
 static int s_battery_percent = -1;
 static bool s_backlight_dimmed;
+static bool s_screen_off;
 static bool s_standby_active;
+static uint32_t s_standby_entered_ms;
 static bool s_wake_gesture_active;
 static bsp_btn_t s_wake_button;
 static bool s_audio_ready;
@@ -268,9 +271,11 @@ static void process_key(const key_event_t* key) {
       return;
     }
     if (key->event != BSP_BTN_PRESS) return;
-    if (s_backlight_dimmed) {
+    s_standby_entered_ms = s_last_activity_ms;
+    if (s_backlight_dimmed || s_screen_off) {
       bsp_display_backlight(100);
       s_backlight_dimmed = false;
+      s_screen_off = false;
     }
     if (key->button == BSP_BTN_OK) s_standby_active = false;
     s_wake_gesture_active = true;
@@ -305,7 +310,9 @@ static void process_key(const key_event_t* key) {
       key->event == BSP_BTN_CLICK) {
     bsp_display_backlight(100);
     s_backlight_dimmed = false;
+    s_screen_off = false;
     s_standby_active = true;
+    s_standby_entered_ms = s_last_activity_ms;
     ESP_LOGI(TAG, "单击上键：保留摇卦状态并返回待机");
     return;
   }
@@ -378,10 +385,12 @@ static void tick(lv_timer_t* timer) {
     if (yaogui_time_sync_generation() != s_time_sync_generation) {
       s_time_sync_indicator = YAOGUI_TIME_SYNC_SUCCESS;
       s_time_sync_started_ms = now_ms();
+      s_standby_entered_ms = s_time_sync_started_ms;
     } else if ((uint32_t)(now_ms() - s_time_sync_started_ms) >=
                TIME_SYNC_TIMEOUT_MS) {
       s_time_sync_indicator = YAOGUI_TIME_SYNC_TIMEOUT;
       s_time_sync_started_ms = now_ms();
+      s_standby_entered_ms = s_time_sync_started_ms;
     }
   } else if (s_time_sync_indicator != YAOGUI_TIME_SYNC_IDLE &&
              (uint32_t)(now_ms() - s_time_sync_started_ms) >=
@@ -400,7 +409,16 @@ static void tick(lv_timer_t* timer) {
       s_model.phase != YAOGUI_ROLLING) {
     bsp_display_backlight(20);
     s_backlight_dimmed = true;
+    s_screen_off = false;
     s_standby_active = true;
+    s_standby_entered_ms = now_ms();
+  }
+  if (s_standby_active && !s_screen_off &&
+      s_time_sync_indicator != YAOGUI_TIME_SYNC_WAITING &&
+      (uint32_t)(now_ms() - s_standby_entered_ms) >= APP_STANDBY_OFF_MS) {
+    bsp_display_backlight(0);
+    s_backlight_dimmed = true;
+    s_screen_off = true;
   }
   char date_text[48];
   int minute_of_day;
@@ -518,8 +536,10 @@ esp_err_t yaogui_app_start(void) {
   lv_screen_load(yaogui_view_screen(s_view));
   lv_obj_delete(loading_screen);
   s_last_activity_ms = now_ms();
+  s_standby_entered_ms = s_last_activity_ms;
   s_battery_read = false;
   s_backlight_dimmed = false;
+  s_screen_off = false;
   s_standby_active = true;
   s_wake_gesture_active = false;
   s_time_sync_indicator = YAOGUI_TIME_SYNC_IDLE;

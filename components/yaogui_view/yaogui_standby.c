@@ -170,10 +170,11 @@ static void draw_circle(lv_layer_t* layer,
 }
 
 static lv_point_precise_t point_at(float x, float y, int ox, int oy) {
-  return (lv_point_precise_t){
+  const lv_point_precise_t point = {
       .x = ox + (int32_t)lroundf(x),
       .y = oy + (int32_t)lroundf(y),
   };
+  return point;
 }
 
 static void sundial_shadow_draw(lv_event_t* event) {
@@ -186,10 +187,9 @@ static void sundial_shadow_draw(lv_event_t* event) {
   const int ox = coords.x1;
   const int oy = coords.y1;
   const float angle = standby->shown_angle;
-  const float tip_x =
-      SUNDIAL_CX + SUNDIAL_SHADOW_RADIUS * cosf(angle);
-  const float tip_y = SUNDIAL_CY +
-                      SUNDIAL_SHADOW_RADIUS * SUNDIAL_TILT * sinf(angle);
+  const float tip_x = SUNDIAL_CX + SUNDIAL_SHADOW_RADIUS * cosf(angle);
+  const float tip_y =
+      SUNDIAL_CY + SUNDIAL_SHADOW_RADIUS * SUNDIAL_TILT * sinf(angle);
   const float nx = -sinf(angle);
   const float ny = cosf(angle) * SUNDIAL_TILT;
   const float normal_length = hypotf(nx, ny);
@@ -200,12 +200,12 @@ static void sundial_shadow_draw(lv_event_t* event) {
   const float dx = tip_x - SUNDIAL_CX;
   const float dy = tip_y - SUNDIAL_CY;
   const float direction_length = hypotf(dx, dy);
-  const float shadow_x =
-      dx / (direction_length > 0.0f ? direction_length : 1.0f) *
-      1.4f * SUNDIAL_SCALE;
-  const float shadow_y =
-      dy / (direction_length > 0.0f ? direction_length : 1.0f) *
-      1.4f * SUNDIAL_SCALE;
+  const float shadow_x = dx /
+                         (direction_length > 0.0f ? direction_length : 1.0f) *
+                         1.4f * SUNDIAL_SCALE;
+  const float shadow_y = dy /
+                         (direction_length > 0.0f ? direction_length : 1.0f) *
+                         1.4f * SUNDIAL_SCALE;
 
   const float px[4] = {
       SUNDIAL_CX + ux * root_width,
@@ -233,26 +233,19 @@ static void sundial_shadow_draw(lv_event_t* event) {
   };
   draw_quad(layer, penumbra, 0x0A0603, 77);
   draw_quad(layer, body, 0x0D0904, 209);
-  draw_circle(layer,
-              ox + (int)SUNDIAL_CX,
-              oy + (int)SUNDIAL_CY,
-              4,
-              0x0D0904,
-              217);
+  draw_circle(
+      layer, ox + (int)SUNDIAL_CX, oy + (int)SUNDIAL_CY, 4, 0x0D0904, 217);
 }
 
 static void create_sundial(yaogui_standby_t* standby) {
-  standby->sundial =
-      plain_object(standby->root, INSTRUMENT_X, INSTRUMENT_Y,
-                   INSTRUMENT_W, SUNDIAL_H);
+  standby->sundial = plain_object(
+      standby->root, INSTRUMENT_X, INSTRUMENT_Y, INSTRUMENT_W, SUNDIAL_H);
   const int x = (INSTRUMENT_W - SUNDIAL_W) / 2;
   const int y = 0;
-  lv_obj_t* scene =
-      plain_object(standby->sundial, x, y, SUNDIAL_W, SUNDIAL_H);
+  lv_obj_t* scene = plain_object(standby->sundial, x, y, SUNDIAL_W, SUNDIAL_H);
   image_at(scene, &yaogui_sundial_base, 0, 0);
   image_at(scene, &yaogui_sundial_face, 0, 0);
-  standby->sundial_shadow =
-      plain_object(scene, 0, 0, SUNDIAL_W, SUNDIAL_H);
+  standby->sundial_shadow = plain_object(scene, 0, 0, SUNDIAL_W, SUNDIAL_H);
   lv_obj_add_event_cb(standby->sundial_shadow,
                       sundial_shadow_draw,
                       LV_EVENT_DRAW_MAIN,
@@ -261,9 +254,8 @@ static void create_sundial(yaogui_standby_t* standby) {
 }
 
 static void create_clepsydra(yaogui_standby_t* standby) {
-  standby->clepsydra =
-      plain_object(standby->root, INSTRUMENT_X, INSTRUMENT_Y,
-                   INSTRUMENT_W, INSTRUMENT_H);
+  standby->clepsydra = plain_object(
+      standby->root, INSTRUMENT_X, INSTRUMENT_Y, INSTRUMENT_W, INSTRUMENT_H);
   lv_obj_set_style_bg_color(standby->clepsydra, lv_color_hex(0x20242A), 0);
   lv_obj_set_style_bg_opa(standby->clepsydra, 26, 0);
   const int scene_x = (INSTRUMENT_W - CLEP_W) / 2;
@@ -277,9 +269,8 @@ static void create_clepsydra(yaogui_standby_t* standby) {
   image_at(scene, &yaogui_clep_pot_shou, 20, 107);
 
   const int mask_top = CLEP_MOUTH_Y - CLEP_ARROW_RISE - 5;
-  standby->arrow_viewport =
-      plain_object(scene, CLEP_CX - 7, mask_top, 14,
-                   CLEP_MOUTH_CLIP - mask_top);
+  standby->arrow_viewport = plain_object(
+      scene, CLEP_CX - 7, mask_top, 14, CLEP_MOUTH_CLIP - mask_top);
   standby->arrow = image_at(standby->arrow_viewport,
                             &yaogui_clep_arrow,
                             7 - CLEP_ARROW_W / 2,
@@ -290,13 +281,9 @@ static void create_clepsydra(yaogui_standby_t* standby) {
     const clep_gap_t* gap = &CLEP_GAPS[i];
     const int lip_y = gap->sink_y;
     standby->drops[i].viewport =
-        plain_object(scene, CLEP_CX - 7, gap->from_y, 14,
-                     lip_y - gap->from_y);
-    standby->drops[i].image =
-        image_at(standby->drops[i].viewport,
-                 &yaogui_clep_drop_0,
-                 7 - 3,
-                 -CLEP_DROP_TIP);
+        plain_object(scene, CLEP_CX - 7, gap->from_y, 14, lip_y - gap->from_y);
+    standby->drops[i].image = image_at(
+        standby->drops[i].viewport, &yaogui_clep_drop_0, 7 - 3, -CLEP_DROP_TIP);
   }
 }
 
@@ -316,21 +303,17 @@ yaogui_standby_t* yaogui_standby_create(lv_obj_t* parent) {
   lv_obj_set_style_bg_color(standby->root, lv_color_hex(0xE8DCC5), 0);
   lv_obj_set_style_bg_opa(standby->root, LV_OPA_COVER, 0);
 
-  standby->date =
-      ui_pixel_label(standby->root, "", &yaogui_font_14, 0x211812);
+  standby->date = ui_pixel_label(standby->root, "", &yaogui_font_14, 0x211812);
   lv_obj_set_pos(standby->date, 16, 13);
   lv_obj_set_size(standby->date, 155, 16);
   standby->battery_body = plain_object(standby->root, 175, 15, 19, 9);
   lv_obj_set_style_border_width(standby->battery_body, 1, 0);
   lv_obj_set_style_border_color(
       standby->battery_body, lv_color_hex(0x211812), 0);
-  standby->battery_fill =
-      plain_object(standby->battery_body, 1, 1, 13, 5);
-  lv_obj_set_style_bg_color(
-      standby->battery_fill, lv_color_hex(0x211812), 0);
+  standby->battery_fill = plain_object(standby->battery_body, 1, 1, 13, 5);
+  lv_obj_set_style_bg_color(standby->battery_fill, lv_color_hex(0x211812), 0);
   lv_obj_set_style_bg_opa(standby->battery_fill, LV_OPA_COVER, 0);
-  standby->battery_terminal =
-      plain_object(standby->root, 194, 18, 2, 3);
+  standby->battery_terminal = plain_object(standby->root, 194, 18, 2, 3);
   lv_obj_set_style_bg_color(
       standby->battery_terminal, lv_color_hex(0x211812), 0);
   lv_obj_set_style_bg_opa(standby->battery_terminal, LV_OPA_COVER, 0);
@@ -338,14 +321,12 @@ yaogui_standby_t* yaogui_standby_create(lv_obj_t* parent) {
       ui_pixel_label(standby->root, "", &yaogui_standby_pixel_10, 0x211812);
   lv_obj_set_pos(standby->battery_percent, 198, 13);
   lv_obj_set_size(standby->battery_percent, 26, 13);
-  lv_obj_set_style_text_align(
-      standby->battery_percent, LV_TEXT_ALIGN_RIGHT, 0);
+  lv_obj_set_style_text_align(standby->battery_percent, LV_TEXT_ALIGN_RIGHT, 0);
 
   lv_obj_t* top_rule = plain_object(standby->root, 16, 32, 208, 1);
   lv_obj_set_style_bg_color(top_rule, lv_color_hex(0x695A4D), 0);
   lv_obj_set_style_bg_opa(top_rule, 60, 0);
-  standby->time =
-      ui_pixel_label(standby->root, "", &yaogui_clock_28, 0x211812);
+  standby->time = ui_pixel_label(standby->root, "", &yaogui_clock_28, 0x211812);
   lv_obj_set_pos(standby->time, 16, 34);
   lv_obj_set_size(standby->time, 100, 28);
   standby->period =
@@ -357,20 +338,20 @@ yaogui_standby_t* yaogui_standby_create(lv_obj_t* parent) {
   create_sundial(standby);
   create_clepsydra(standby);
 
-  standby->calendar_rule =
-      plain_object(standby->root, 16, 216, 208, 1);
-  lv_obj_set_style_bg_color(
-      standby->calendar_rule, lv_color_hex(0x695A4D), 0);
+  standby->calendar_rule = plain_object(standby->root, 16, 216, 208, 1);
+  lv_obj_set_style_bg_color(standby->calendar_rule, lv_color_hex(0x695A4D), 0);
   lv_obj_set_style_bg_opa(standby->calendar_rule, 52, 0);
-  standby->lunar =
-      ui_pixel_label(standby->root, "农历丙午年七月廿五",
-                     &yaogui_standby_display_12, 0x211812);
+  standby->lunar = ui_pixel_label(standby->root,
+                                  "农历丙午年七月廿五",
+                                  &yaogui_standby_display_12,
+                                  0x211812);
   lv_obj_set_pos(standby->lunar, 16, 220);
   lv_obj_set_size(standby->lunar, 208, 16);
   lv_obj_set_style_text_align(standby->lunar, LV_TEXT_ALIGN_CENTER, 0);
-  standby->ganzhi =
-      ui_pixel_label(standby->root, "甲申月 · 癸未日 · 白露将至",
-                     &yaogui_standby_calendar_10, 0x695A4D);
+  standby->ganzhi = ui_pixel_label(standby->root,
+                                   "甲申月 · 癸未日 · 白露将至",
+                                   &yaogui_standby_calendar_10,
+                                   0x695A4D);
   lv_obj_set_pos(standby->ganzhi, 16, 237);
   lv_obj_set_size(standby->ganzhi, 208, 15);
   lv_obj_set_style_text_align(standby->ganzhi, LV_TEXT_ALIGN_CENTER, 0);
@@ -391,17 +372,15 @@ yaogui_standby_t* yaogui_standby_create(lv_obj_t* parent) {
   lv_obj_set_pos(standby->ji_text, 30, 265);
   lv_obj_set_size(standby->ji_text, 194, 12);
 
-  standby->footer_rule =
-      plain_object(standby->root, 16, 295, 208, 1);
-  lv_obj_set_style_bg_color(
-      standby->footer_rule, lv_color_hex(0x695A4D), 0);
+  standby->footer_rule = plain_object(standby->root, 16, 295, 208, 1);
+  lv_obj_set_style_bg_color(standby->footer_rule, lv_color_hex(0x695A4D), 0);
   lv_obj_set_style_bg_opa(standby->footer_rule, 52, 0);
-  standby->footer_slots =
-      plain_object(standby->root, 16, 303, 27, 18);
+  standby->footer_slots = plain_object(standby->root, 16, 303, 27, 18);
   create_footer_lines(standby->footer_slots);
-  standby->footer =
-      ui_pixel_label(standby->root, "六爻未启　确认键·启坛起卦",
-                     &yaogui_standby_pixel_10, 0xA73529);
+  standby->footer = ui_pixel_label(standby->root,
+                                   "六爻未启　确认键·启坛起卦",
+                                   &yaogui_standby_pixel_10,
+                                   0xA73529);
   lv_obj_set_pos(standby->footer, 49, 304);
   lv_obj_set_size(standby->footer, 175, 14);
   lv_obj_set_style_text_align(standby->footer, LV_TEXT_ALIGN_RIGHT, 0);
@@ -473,11 +452,9 @@ static void render_clepsydra(yaogui_standby_t* standby,
                              float delta_frames) {
   const float target_y = CLEP_MOUTH_Y - clamp01(progress) * CLEP_ARROW_RISE;
   standby->arrow_shown_y +=
-      (target_y - standby->arrow_shown_y) *
-      fminf(1.0f, 0.12f * delta_frames);
+      (target_y - standby->arrow_shown_y) * fminf(1.0f, 0.12f * delta_frames);
   const int mask_top = CLEP_MOUTH_Y - CLEP_ARROW_RISE - 5;
-  lv_obj_set_y(standby->arrow,
-               (int)lroundf(standby->arrow_shown_y) - mask_top);
+  lv_obj_set_y(standby->arrow, (int)lroundf(standby->arrow_shown_y) - mask_top);
 
   const float base_phase = fmodf((float)now_ms / 1515.0f, 1.0f);
   for (size_t i = 0; i < 3; i++) {
@@ -490,15 +467,12 @@ static void render_clepsydra(yaogui_standby_t* standby,
     const lv_image_dsc_t* frame;
     if (phase < CLEP_FALL_END) {
       const float k = phase / CLEP_FALL_END;
-      tip_y = gap->from_y +
-              (lip_y - gap->from_y) * k * k;
-      opacity = phase < 0.06f
-                    ? (lv_opa_t)lroundf(255.0f * phase / 0.06f)
-                    : LV_OPA_COVER;
+      tip_y = gap->from_y + (lip_y - gap->from_y) * k * k;
+      opacity = phase < 0.06f ? (lv_opa_t)lroundf(255.0f * phase / 0.06f)
+                              : LV_OPA_COVER;
       frame = k < 0.5f ? &yaogui_clep_drop_0 : &yaogui_clep_drop_1;
     } else {
-      const float k =
-          (phase - CLEP_FALL_END) / (1.0f - CLEP_FALL_END);
+      const float k = (phase - CLEP_FALL_END) / (1.0f - CLEP_FALL_END);
       tip_y = lip_y + k * (CLEP_DROP_H + 3);
       opacity = (lv_opa_t)lroundf(255.0f * (1.0f - k * 0.7f));
       frame = &yaogui_clep_drop_1;
@@ -518,8 +492,7 @@ static void apply_palette(yaogui_standby_t* standby, bool night) {
   lv_obj_set_style_text_color(standby->date, lv_color_hex(foreground), 0);
   lv_obj_set_style_border_color(
       standby->battery_body, lv_color_hex(foreground), 0);
-  lv_obj_set_style_bg_color(
-      standby->battery_fill, lv_color_hex(foreground), 0);
+  lv_obj_set_style_bg_color(standby->battery_fill, lv_color_hex(foreground), 0);
   lv_obj_set_style_bg_color(
       standby->battery_terminal, lv_color_hex(foreground), 0);
   lv_obj_set_style_text_color(
@@ -543,8 +516,7 @@ void yaogui_standby_render(yaogui_standby_t* standby,
                            bool time_valid,
                            bool worst_case) {
   if (!standby) return;
-  if (minute_of_day < 0 || minute_of_day >= 24 * 60)
-    minute_of_day = 12 * 60;
+  if (minute_of_day < 0 || minute_of_day >= 24 * 60) minute_of_day = 12 * 60;
   const bool night = minute_of_day < 6 * 60 || minute_of_day >= 18 * 60;
   if (night != standby->night) {
     standby->night = night;
@@ -593,7 +565,7 @@ void yaogui_standby_render(yaogui_standby_t* standby,
     set_compact_text(standby->yi_text, "修饰垣墙 · 平治道涂");
     set_compact_text(standby->ji_text, "会亲友 · 进人口");
   } else if (time_valid &&
-      yaogui_calendar_lookup(year, month, day, &calendar)) {
+             yaogui_calendar_lookup(year, month, day, &calendar)) {
     lv_label_set_text(standby->lunar, calendar.lunar);
     lv_label_set_text(standby->ganzhi, calendar.ganzhi);
     set_compact_text(standby->yi_text, calendar.yi);
@@ -612,14 +584,11 @@ void yaogui_standby_render(yaogui_standby_t* standby,
   }
   standby->last_ms = now_ms;
   if (!night) {
-    const float progress =
-        (float)(minute_of_day - 6 * 60) / (12.0f * 60.0f);
+    const float progress = (float)(minute_of_day - 6 * 60) / (12.0f * 60.0f);
     render_sundial(standby, progress, delta_frames);
   } else {
-    const int elapsed =
-        minute_of_day >= 18 * 60
-            ? minute_of_day - 18 * 60
-            : 6 * 60 + minute_of_day;
+    const int elapsed = minute_of_day >= 18 * 60 ? minute_of_day - 18 * 60
+                                                 : 6 * 60 + minute_of_day;
     render_clepsydra(
         standby, now_ms, (float)elapsed / (12.0f * 60.0f), delta_frames);
   }
