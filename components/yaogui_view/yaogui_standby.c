@@ -553,7 +553,7 @@ void yaogui_standby_render(yaogui_standby_t* standby,
     set_compact_text(standby->period, period_text(minute_of_day, night));
   } else {
     lv_label_set_text(standby->time, "--:--");
-    lv_label_set_text(standby->period, "等待蓝牙校时");
+    lv_label_set_text(standby->period, "等待手机校时");
   }
 
   yaogui_calendar_day_t calendar;

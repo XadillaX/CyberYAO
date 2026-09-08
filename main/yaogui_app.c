@@ -27,7 +27,7 @@ static const char* TAG = "yaogui";
 #define APP_IDLE_DIM_MS 30000U
 #define APP_STANDBY_OFF_MS 30000U
 #define BATTERY_REFRESH_MS 30000U
-#define TIME_SYNC_TIMEOUT_MS 30000U
+#define TIME_SYNC_TIMEOUT_MS 120000U
 #define TIME_SYNC_RESULT_MS 2000U
 
 typedef struct {
@@ -68,6 +68,7 @@ static bool s_audio_ready;
 static yaogui_time_sync_indicator_t s_time_sync_indicator;
 static uint32_t s_time_sync_started_ms;
 static uint32_t s_time_sync_generation;
+static uint32_t s_time_sync_error_generation;
 
 static bool standby_clock(char* date_text,
                           size_t date_text_size,
@@ -116,13 +117,14 @@ static void request_time_sync(void) {
   if (yaogui_time_sync_request() != ESP_OK) {
     s_time_sync_indicator = YAOGUI_TIME_SYNC_TIMEOUT;
     s_time_sync_started_ms = now_ms();
-    ESP_LOGW(TAG, "蓝牙校时请求失败");
+    ESP_LOGW(TAG, "Wi-Fi 校时请求失败");
     return;
   }
   s_time_sync_generation = yaogui_time_sync_generation();
+  s_time_sync_error_generation = yaogui_time_sync_error_generation();
   s_time_sync_started_ms = now_ms();
   s_time_sync_indicator = YAOGUI_TIME_SYNC_WAITING;
-  ESP_LOGI(TAG, "等待外部设备写入蓝牙时间");
+  ESP_LOGI(TAG, "等待手机通过 Wi-Fi 页面提交本地时间");
 }
 
 static esp_err_t teardown_step(esp_err_t first_error,
@@ -389,8 +391,14 @@ static void tick(lv_timer_t* timer) {
       s_time_sync_indicator = YAOGUI_TIME_SYNC_SUCCESS;
       s_time_sync_started_ms = now_ms();
       s_standby_entered_ms = s_time_sync_started_ms;
+    } else if (yaogui_time_sync_error_generation() !=
+               s_time_sync_error_generation) {
+      s_time_sync_indicator = YAOGUI_TIME_SYNC_TIMEOUT;
+      s_time_sync_started_ms = now_ms();
+      s_standby_entered_ms = s_time_sync_started_ms;
     } else if ((uint32_t)(now_ms() - s_time_sync_started_ms) >=
                TIME_SYNC_TIMEOUT_MS) {
+      (void)yaogui_time_sync_cancel();
       s_time_sync_indicator = YAOGUI_TIME_SYNC_TIMEOUT;
       s_time_sync_started_ms = now_ms();
       s_standby_entered_ms = s_time_sync_started_ms;

@@ -57,6 +57,8 @@ struct yaogui_view {
   yaogui_standby_t* standby;
   lv_obj_t* time_sync_panel;
   lv_obj_t* time_sync_label;
+  lv_obj_t* time_sync_qr;
+  lv_obj_t* time_sync_hint;
   _Alignas(4) uint8_t
       coin_pixels[YAOGUI_SHELL_COUNT][INDEXED_FRAME_BYTES(COIN_FRAME_SIZE)];
   lv_image_dsc_t coin_frames[YAOGUI_SHELL_COUNT];
@@ -508,11 +510,29 @@ static void render_time_sync_indicator(yaogui_view_t* view,
   if (state->time_sync_indicator == YAOGUI_TIME_SYNC_WAITING) {
     static const char* const frames[] = {"|", "/", "-", "\\"};
     const char* frame = frames[(state->now_ms / 150U) % 4U];
-    snprintf(text, sizeof(text), "蓝牙校时 %s", frame);
+    snprintf(text, sizeof(text), "扫码加入开放 WiFi %s", frame);
+    lv_obj_set_pos(view->time_sync_panel, 13, 28);
+    lv_obj_set_size(view->time_sync_panel, 214, 264);
+    lv_obj_set_pos(view->time_sync_label, 5, 8);
+    lv_obj_set_size(view->time_sync_label, 200, 20);
+    set_hidden(view->time_sync_qr, false);
+    set_hidden(view->time_sync_hint, false);
   } else if (state->time_sync_indicator == YAOGUI_TIME_SYNC_SUCCESS) {
     snprintf(text, sizeof(text), "校时完成");
+    lv_obj_set_pos(view->time_sync_panel, 45, 141);
+    lv_obj_set_size(view->time_sync_panel, 150, 38);
+    lv_obj_set_pos(view->time_sync_label, 5, 8);
+    lv_obj_set_size(view->time_sync_label, 136, 20);
+    set_hidden(view->time_sync_qr, true);
+    set_hidden(view->time_sync_hint, true);
   } else {
     snprintf(text, sizeof(text), "校时超时");
+    lv_obj_set_pos(view->time_sync_panel, 45, 141);
+    lv_obj_set_size(view->time_sync_panel, 150, 38);
+    lv_obj_set_pos(view->time_sync_label, 5, 8);
+    lv_obj_set_size(view->time_sync_label, 136, 20);
+    set_hidden(view->time_sync_qr, true);
+    set_hidden(view->time_sync_hint, true);
   }
   lv_label_set_text(view->time_sync_label, text);
   set_hidden(view->time_sync_panel, false);
@@ -603,15 +623,31 @@ yaogui_view_t* yaogui_view_create(void) {
     return NULL;
   }
   view->time_sync_panel =
-      create_block(view->screen, 68, 147, 104, 26, 0xF7EEDB);
+      create_block(view->screen, 13, 28, 214, 264, 0xF7EEDB);
   lv_obj_set_style_border_width(view->time_sync_panel, 2, 0);
   lv_obj_set_style_border_color(
       view->time_sync_panel, lv_color_hex(0xA73529), 0);
   view->time_sync_label =
       ui_pixel_label(view->time_sync_panel, "", &yaogui_font_14, 0x352014);
-  lv_obj_set_size(view->time_sync_label, 100, 18);
-  lv_obj_center(view->time_sync_label);
+  lv_obj_set_pos(view->time_sync_label, 5, 8);
+  lv_obj_set_size(view->time_sync_label, 200, 20);
   lv_obj_set_style_text_align(view->time_sync_label, LV_TEXT_ALIGN_CENTER, 0);
+  view->time_sync_qr = lv_qrcode_create(view->time_sync_panel);
+  lv_qrcode_set_size(view->time_sync_qr, 164);
+  lv_qrcode_set_dark_color(view->time_sync_qr, lv_color_hex(0x352014));
+  lv_qrcode_set_light_color(view->time_sync_qr, lv_color_hex(0xF7EEDB));
+  lv_qrcode_set_quiet_zone(view->time_sync_qr, true);
+  lv_qrcode_set_data(view->time_sync_qr,
+                     "WIFI:T:nopass;S:CyberYAO-Time;H:false;;");
+  lv_obj_set_pos(view->time_sync_qr, 23, 37);
+  view->time_sync_hint =
+      ui_pixel_label(view->time_sync_panel,
+                     "连接后会自动弹出校时页\n未弹出请访问 192.168.4.1",
+                     &yaogui_font_14,
+                     0x6D2F20);
+  lv_obj_set_pos(view->time_sync_hint, 5, 211);
+  lv_obj_set_size(view->time_sync_hint, 200, 42);
+  lv_obj_set_style_text_align(view->time_sync_hint, LV_TEXT_ALIGN_CENTER, 0);
   set_hidden(view->time_sync_panel, true);
   return view;
 }

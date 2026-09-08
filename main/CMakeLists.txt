@@ -5,6 +5,6 @@ idf_component_register(
          "yaogui_time_sync.c"
          "fap_screenshot.c"
     INCLUDE_DIRS "."
-    REQUIRES bsp bt driver yaogui_view esp_event esp_netif esp_timer esp_wifi
-             nvs_flash
+    REQUIRES bsp driver yaogui_view esp_event esp_http_server esp_netif
+             esp_timer esp_wifi nvs_flash
 )
