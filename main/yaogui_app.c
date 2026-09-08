@@ -272,12 +272,15 @@ static void process_key(const key_event_t* key) {
     }
     if (key->event != BSP_BTN_PRESS) return;
     s_standby_entered_ms = s_last_activity_ms;
+    const bool waking_from_screen_off = s_screen_off;
     if (s_backlight_dimmed || s_screen_off) {
       bsp_display_backlight(100);
       s_backlight_dimmed = false;
       s_screen_off = false;
     }
-    if (key->button == BSP_BTN_OK) s_standby_active = false;
+    if (key->button == BSP_BTN_OK && !waking_from_screen_off) {
+      s_standby_active = false;
+    }
     s_wake_gesture_active = true;
     s_wake_button = key->button;
     return;
