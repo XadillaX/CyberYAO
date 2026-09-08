@@ -176,6 +176,47 @@ int main(int argc, char** argv) {
   const bool smoke_test = has_argument(argc, argv, "--smoke-test");
   const char* snapshot_path = argument_value(argc, argv, "--snapshot");
   const char* snapshot_mode = argument_value(argc, argv, "--snapshot-mode");
+  const bool force_standby = has_argument(argc, argv, "--standby");
+  const char* standby_minute_arg =
+      argument_value(argc, argv, "--standby-minute");
+  bool snapshot_standby = false;
+  bool snapshot_worst_case = false;
+  bool snapshot_waiting = false;
+  bool snapshot_time_sync = false;
+  int snapshot_minute = 12 * 60 + 28;
+  if (force_standby && standby_minute_arg) {
+    snapshot_minute = atoi(standby_minute_arg);
+    if (snapshot_minute < 0 || snapshot_minute >= 24 * 60)
+      snapshot_minute = 12 * 60 + 28;
+  }
+  if (snapshot_mode && strncmp(snapshot_mode, "standby-", 8) == 0) {
+    snapshot_standby = true;
+    if (strcmp(snapshot_mode, "standby-day-morning") == 0) {
+      snapshot_minute = 7 * 60;
+    } else if (strcmp(snapshot_mode, "standby-day-noon") == 0) {
+      snapshot_minute = 12 * 60;
+    } else if (strcmp(snapshot_mode, "standby-day-dusk") == 0) {
+      snapshot_minute = 17 * 60;
+    } else if (strcmp(snapshot_mode, "standby-night-start") == 0) {
+      snapshot_minute = 19 * 60;
+    } else if (strcmp(snapshot_mode, "standby-night-mid") == 0) {
+      snapshot_minute = 0;
+    } else if (strcmp(snapshot_mode, "standby-night-end") == 0) {
+      snapshot_minute = 5 * 60 + 30;
+    } else if (strcmp(snapshot_mode, "standby-worst-day") == 0) {
+      snapshot_minute = 14 * 60 + 59;
+      snapshot_worst_case = true;
+    } else if (strcmp(snapshot_mode, "standby-worst-night") == 0) {
+      snapshot_minute = 23 * 60 + 59;
+      snapshot_worst_case = true;
+    } else if (strcmp(snapshot_mode, "standby-waiting") == 0) {
+      snapshot_minute = 12 * 60;
+      snapshot_waiting = true;
+    } else if (strcmp(snapshot_mode, "standby-time-sync") == 0) {
+      snapshot_minute = 12 * 60;
+      snapshot_time_sync = true;
+    }
+  }
   const bool interactive_audio = !smoke_test && !snapshot_path;
   uint32_t snapshot_now_ms = UINT32_MAX;
   lv_init();
@@ -266,12 +307,19 @@ int main(int argc, char** argv) {
   set_title(display, &mock);
 
   bool running = true;
+  bool standby_active = force_standby || !snapshot_path;
   unsigned frame_count = 0;
   while (running) {
     const uint32_t now_ms =
         snapshot_now_ms == UINT32_MAX ? SDL_GetTicks() : snapshot_now_ms;
-    const unsigned keys = s_keys;
+    unsigned keys = s_keys;
     s_keys = 0;
+    const unsigned wake_keys =
+        KEY_UP | KEY_DOWN | KEY_CONFIRM | KEY_CONFIRM_LONG | KEY_RESET;
+    if (standby_active && (keys & wake_keys)) {
+      standby_active = false;
+      keys &= ~wake_keys;
+    }
 
     if (keys & KEY_QUIT) {
       running = false;
@@ -324,7 +372,20 @@ int main(int argc, char** argv) {
     const yaogui_view_state_t state = {
         .model = &model,
         .now_ms = now_ms,
-        .battery_percent = 86,
+        .battery_percent = snapshot_waiting      ? -1
+                           : snapshot_worst_case ? 100
+                                                 : 86,
+        .standby = snapshot_standby || standby_active,
+        .minute_of_day = snapshot_minute,
+        .date_text = snapshot_worst_case ? "2040年12月31日 · 星期三"
+                                         : "2026年9月7日 · 星期一",
+        .year = 2026,
+        .month = 9,
+        .day = 7,
+        .time_valid = !snapshot_waiting,
+        .standby_worst_case = snapshot_worst_case,
+        .time_sync_indicator = snapshot_time_sync ? YAOGUI_TIME_SYNC_WAITING
+                                                  : YAOGUI_TIME_SYNC_IDLE,
     };
     yaogui_view_render(view, &state);
     lv_timer_handler();

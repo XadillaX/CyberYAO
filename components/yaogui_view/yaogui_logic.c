@@ -23,6 +23,80 @@ static uint32_t random_range(uint32_t* state,
   return minimum + motion_random(state) % (maximum - minimum + 1U);
 }
 
+static int16_t reflected_axis(int32_t value, int32_t span) {
+  int32_t folded = value % (span * 2);
+  if (folded < 0) folded += span * 2;
+  if (folded > span) folded = span * 2 - folded;
+  return (int16_t)(4 + folded);
+}
+
+static int16_t clamp_i16(int16_t value, int16_t minimum, int16_t maximum) {
+  if (value < minimum) return minimum;
+  if (value > maximum) return maximum;
+  return value;
+}
+
+static int16_t absolute_i16(int16_t value) {
+  return value < 0 ? (int16_t)-value : value;
+}
+
+static void resolve_target_collisions(yaogui_model_t* model) {
+  const int16_t max_x = (int16_t)(YAOGUI_ARENA_WIDTH - YAOGUI_SHELL_WIDTH - 4);
+  const int16_t max_y =
+      (int16_t)(YAOGUI_ARENA_HEIGHT - YAOGUI_SHELL_HEIGHT - 4);
+  for (size_t current = 0; current < YAOGUI_SHELL_COUNT; current++) {
+    model->target_x[current] = clamp_i16(model->target_x[current], 4, max_x);
+    model->target_y[current] = clamp_i16(model->target_y[current], 4, max_y);
+    for (size_t pass = 0; pass < 24; pass++) {
+      bool moved = false;
+      for (size_t settled = 0; settled < current; settled++) {
+        int16_t dx =
+            (int16_t)(model->target_x[current] - model->target_x[settled]);
+        int16_t dy =
+            (int16_t)(model->target_y[current] - model->target_y[settled]);
+        int16_t overlap_x = (int16_t)(YAOGUI_SHELL_WIDTH - absolute_i16(dx));
+        int16_t overlap_y = (int16_t)(YAOGUI_SHELL_HEIGHT - absolute_i16(dy));
+        if (overlap_x <= 0 || overlap_y <= 0) continue;
+        moved = true;
+        if (overlap_x <= overlap_y) {
+          int16_t direction = dx == 0
+                                  ? (model->velocity_x[current] < 0 ? -1 : 1)
+                                  : (dx < 0 ? -1 : 1);
+          int16_t original = model->target_x[current];
+          model->target_x[current] =
+              clamp_i16((int16_t)(original + direction * overlap_x), 4, max_x);
+          if (model->target_x[current] == original) {
+            int16_t y_direction =
+                dy == 0 ? (model->velocity_y[current] < 0 ? -1 : 1)
+                        : (dy < 0 ? -1 : 1);
+            model->target_y[current] = clamp_i16(
+                (int16_t)(model->target_y[current] + y_direction * overlap_y),
+                4,
+                max_y);
+          }
+        } else {
+          int16_t direction = dy == 0
+                                  ? (model->velocity_y[current] < 0 ? -1 : 1)
+                                  : (dy < 0 ? -1 : 1);
+          int16_t original = model->target_y[current];
+          model->target_y[current] =
+              clamp_i16((int16_t)(original + direction * overlap_y), 4, max_y);
+          if (model->target_y[current] == original) {
+            int16_t x_direction =
+                dx == 0 ? (model->velocity_x[current] < 0 ? -1 : 1)
+                        : (dx < 0 ? -1 : 1);
+            model->target_x[current] = clamp_i16(
+                (int16_t)(model->target_x[current] + x_direction * overlap_x),
+                4,
+                max_x);
+          }
+        }
+      }
+      if (!moved) break;
+    }
+  }
+}
+
 bool yaogui_model_start_seeded(yaogui_model_t* model,
                                uint32_t now_ms,
                                uint32_t seed) {
@@ -44,36 +118,37 @@ bool yaogui_model_start_seeded(yaogui_model_t* model,
   model->motion_seed = seed ? seed : UINT32_C(0x59474f55);
 
   uint32_t random = model->motion_seed;
-  /* 三个锚点构成宽三角形；轻微二维抖动后仍能保证龟甲外框不重叠。 */
-  static const int16_t anchors[YAOGUI_SHELL_COUNT][2] = {
-      {28, 42},
-      {116, 42},
-      {72, 116},
-  };
-  uint8_t slots[YAOGUI_SHELL_COUNT] = {0, 1, 2};
-  for (size_t i = YAOGUI_SHELL_COUNT - 1U; i > 0; i--) {
-    size_t other = random_range(&random, 0, (uint32_t)i);
-    uint8_t temporary = slots[i];
-    slots[i] = slots[other];
-    slots[other] = temporary;
-  }
+  const uint32_t target_elapsed = YAOGUI_MIN_ROLL_MS - YAOGUI_SHELL_HIDE_MS;
   for (size_t i = 0; i < YAOGUI_SHELL_COUNT; i++) {
     model->start_x[i] =
         (int16_t)(72 + (int16_t)random_range(&random, 0, 8) - 4);
-    int16_t speed = (int16_t)random_range(&random, 32, 68);
-    model->velocity_x[i] = (motion_random(&random) & 1U) ? speed : -speed;
+    model->start_y[i] =
+        (int16_t)(76 + (int16_t)random_range(&random, 0, 8) - 4);
+    int16_t speed_x = (int16_t)random_range(&random, 32, 68);
+    int16_t speed_y = (int16_t)random_range(&random, 28, 58);
+    model->velocity_x[i] = (motion_random(&random) & 1U) ? speed_x : -speed_x;
+    model->velocity_y[i] = (motion_random(&random) & 1U) ? speed_y : -speed_y;
     model->hop_ms[i] = (uint16_t)random_range(&random, 680, 980);
     model->height[i] = (uint8_t)random_range(&random, 32, 58);
     model->angle_start[i] = (int16_t)random_range(&random, 0, 3599);
     int16_t spin = (int16_t)random_range(&random, 17, 35);
     model->angular_velocity[i] = (motion_random(&random) & 1U) ? spin : -spin;
-    const uint8_t slot = slots[i];
     model->target_x[i] =
-        (int16_t)(anchors[slot][0] + (int16_t)random_range(&random, 0, 8) - 4);
+        reflected_axis(model->start_x[i] + (int32_t)model->velocity_x[i] *
+                                               target_elapsed / 1000,
+                       YAOGUI_ARENA_WIDTH - YAOGUI_SHELL_WIDTH - 8);
     model->target_y[i] =
-        (int16_t)(anchors[slot][1] + (int16_t)random_range(&random, 0, 8) - 4);
-    model->target_angle[i] = (int16_t)random_range(&random, 0, 3599);
+        reflected_axis(model->start_y[i] + (int32_t)model->velocity_y[i] *
+                                               target_elapsed / 1000,
+                       YAOGUI_ARENA_HEIGHT - YAOGUI_SHELL_HEIGHT - 8);
+    int32_t target_angle =
+        model->angle_start[i] +
+        (int32_t)model->angular_velocity[i] * (int32_t)target_elapsed / 10;
+    target_angle %= 3600;
+    if (target_angle < 0) target_angle += 3600;
+    model->target_angle[i] = (int16_t)target_angle;
   }
+  resolve_target_collisions(model);
   return true;
 }
 
@@ -153,14 +228,6 @@ uint8_t yaogui_model_frame(const yaogui_model_t* model,
   return (uint8_t)((frame + shell_index) & 1U);
 }
 
-static int16_t reflected_x(int32_t value) {
-  const int32_t span = YAOGUI_ARENA_WIDTH - YAOGUI_SHELL_WIDTH - 8;
-  int32_t folded = value % (span * 2);
-  if (folded < 0) folded += span * 2;
-  if (folded > span) folded = span * 2 - folded;
-  return (int16_t)(4 + folded);
-}
-
 static void rolling_motion(const yaogui_model_t* model,
                            uint32_t elapsed,
                            size_t index,
@@ -181,9 +248,16 @@ static void rolling_motion(const yaogui_model_t* model,
   uint32_t local = (elapsed + index * 173U) % period;
   uint32_t height = (4U * model->height[index] * local * (period - local)) /
                     (period * period);
-  int32_t travel = (int32_t)model->velocity_x[index] * (int32_t)elapsed / 1000;
-  motion->x = reflected_x(model->start_x[index] + travel);
-  motion->y = (int16_t)(76 - (int32_t)height);
+  int32_t travel_x =
+      (int32_t)model->velocity_x[index] * (int32_t)elapsed / 1000;
+  int32_t travel_y =
+      (int32_t)model->velocity_y[index] * (int32_t)elapsed / 1000;
+  motion->x = reflected_axis(model->start_x[index] + travel_x,
+                             YAOGUI_ARENA_WIDTH - YAOGUI_SHELL_WIDTH - 8);
+  int16_t plane_y =
+      reflected_axis(model->start_y[index] + travel_y,
+                     YAOGUI_ARENA_HEIGHT - YAOGUI_SHELL_HEIGHT - 8);
+  motion->y = (int16_t)(plane_y - (int32_t)height);
   motion->rotation = (int16_t)((model->angle_start[index] +
                                 (int32_t)model->angular_velocity[index] *
                                     (int32_t)elapsed / 10) %
@@ -215,11 +289,19 @@ static void separate_collision(const yaogui_model_t* model,
     rolling_motion(model, elapsed, other, &neighbour);
     int16_t dx = (int16_t)(motion->x - neighbour.x);
     int16_t dy = (int16_t)(motion->y - neighbour.y);
-    if (dx > -42 && dx < 42 && dy > -24 && dy < 24) {
-      int16_t push = (int16_t)((42 - (dx < 0 ? -dx : dx)) / 2);
+    int16_t overlap_x = (int16_t)(YAOGUI_SHELL_WIDTH - absolute_i16(dx));
+    int16_t overlap_y = (int16_t)(YAOGUI_SHELL_HEIGHT - absolute_i16(dy));
+    if (overlap_x <= 0 || overlap_y <= 0) continue;
+    if (overlap_x < overlap_y) {
+      int16_t push = (int16_t)((overlap_x + 1) / 2);
       motion->x += shell_index < other ? -push : push;
-      if (motion->x < 4) motion->x = 4;
-      if (motion->x > 140) motion->x = 140;
+      motion->x =
+          clamp_i16(motion->x, 4, YAOGUI_ARENA_WIDTH - YAOGUI_SHELL_WIDTH - 4);
+    } else {
+      int16_t push = (int16_t)((overlap_y + 1) / 2);
+      motion->y += shell_index < other ? -push : push;
+      motion->y = clamp_i16(
+          motion->y, 4, YAOGUI_ARENA_HEIGHT - YAOGUI_SHELL_HEIGHT - 4);
     }
   }
 }
@@ -303,8 +385,16 @@ void yaogui_model_motion(const yaogui_model_t* model,
                 ((model->target_angle[shell_index] - start.rotation) *
                  (int32_t)eased) /
                     256);
-  motion->scale_x =
-      (uint16_t)(start.scale_x + ((256 - start.scale_x) * eased) / 256U);
+  if (progress < 128U) {
+    motion->scale_x =
+        (uint16_t)(start.scale_x - ((start.scale_x - 32U) * progress) / 128U);
+    motion->belly = start.belly;
+  } else {
+    uint32_t unfold = progress - 128U;
+    motion->scale_x = (uint16_t)(32U + (224U * unfold) / 128U);
+    motion->belly =
+        model->request_succeeded ? model->pending[shell_index] != 0 : false;
+  }
   motion->scale_y =
       (uint16_t)(start.scale_y + ((256 - start.scale_y) * eased) / 256U);
   motion->shadow_scale =
@@ -312,9 +402,6 @@ void yaogui_model_motion(const yaogui_model_t* model,
                  ((220 - start.shadow_scale) * eased) / 256U);
   motion->shadow_opa =
       (uint8_t)(start.shadow_opa + ((72 - start.shadow_opa) * eased) / 256U);
-  if (model->request_succeeded && progress >= 160U) {
-    motion->belly = model->pending[shell_index] != 0;
-  }
 }
 
 bool yaogui_coins_to_line(const uint8_t values[YAOGUI_SHELL_COUNT],
@@ -578,9 +665,9 @@ bool yaogui_model_key(yaogui_model_t* model,
                       uint32_t now_ms,
                       uint32_t seed) {
   if (!model) return false;
-  if (key == YAOGUI_KEY_OK_LONG && model->phase != YAOGUI_ROLLING) {
+  if (key == YAOGUI_KEY_OK_LONG) {
     yaogui_model_init(model);
-    return yaogui_model_start_seeded(model, now_ms, seed);
+    return false;
   }
   if (model->reading.open) {
     if (key == YAOGUI_KEY_UP && model->reading.current > 0) {

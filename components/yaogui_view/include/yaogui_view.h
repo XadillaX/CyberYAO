@@ -9,10 +9,26 @@ extern "C" {
 
 typedef struct yaogui_view yaogui_view_t;
 
+typedef enum {
+  YAOGUI_TIME_SYNC_IDLE = 0,
+  YAOGUI_TIME_SYNC_WAITING,
+  YAOGUI_TIME_SYNC_SUCCESS,
+  YAOGUI_TIME_SYNC_TIMEOUT,
+} yaogui_time_sync_indicator_t;
+
 typedef struct {
   const yaogui_model_t* model;
   uint32_t now_ms;
   int battery_percent;
+  bool standby;
+  int minute_of_day;
+  const char* date_text;
+  int year;
+  int month;
+  int day;
+  bool time_valid;
+  bool standby_worst_case;
+  yaogui_time_sync_indicator_t time_sync_indicator;
 } yaogui_view_state_t;
 
 /* 创建完整的 240x320 摇龟界面；调用方负责加载返回视图的 screen。 */

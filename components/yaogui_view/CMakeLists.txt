@@ -3,11 +3,17 @@ set(YAOGUI_GENERATED_SRCS
     "${YAOGUI_GENERATED_DIR}/yaogui_font_14.c"
     "${YAOGUI_GENERATED_DIR}/yaogui_classic_14.c"
     "${YAOGUI_GENERATED_DIR}/yaogui_mifu_18.c"
+    "${YAOGUI_GENERATED_DIR}/yaogui_clock_28.c"
+    "${YAOGUI_GENERATED_DIR}/yaogui_standby_display_12.c"
+    "${YAOGUI_GENERATED_DIR}/yaogui_standby_calendar_10.c"
+    "${YAOGUI_GENERATED_DIR}/yaogui_standby_pixel_10.c"
     "${YAOGUI_GENERATED_DIR}/yaogui_coin_sound.c"
     "${YAOGUI_GENERATED_DIR}/yaogui_ambient_sound.c"
     "${YAOGUI_GENERATED_DIR}/yaogui_shell_images.c"
     "${YAOGUI_GENERATED_DIR}/yaogui_coin_images.c"
     "${YAOGUI_GENERATED_DIR}/yaogui_table_image.c"
+    "${YAOGUI_GENERATED_DIR}/yaogui_standby_images.c"
+    "${YAOGUI_GENERATED_DIR}/yaogui_calendar_data.c"
 )
 
 foreach(generated_source IN LISTS YAOGUI_GENERATED_SRCS)
@@ -23,6 +29,7 @@ idf_component_register(
     SRCS "ui_pixel.c"
          "yaogui_logic.c"
          "yaogui_text_data.c"
+         "yaogui_standby.c"
          ${YAOGUI_GENERATED_SRCS}
          "yaogui_view.c"
     INCLUDE_DIRS "include"

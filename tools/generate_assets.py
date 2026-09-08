@@ -35,11 +35,17 @@ OUTPUTS = (
     "yaogui_font_14.c",
     "yaogui_classic_14.c",
     "yaogui_mifu_18.c",
+    "yaogui_clock_28.c",
+    "yaogui_standby_display_12.c",
+    "yaogui_standby_calendar_10.c",
+    "yaogui_standby_pixel_10.c",
     "yaogui_coin_sound.c",
     "yaogui_ambient_sound.c",
     "yaogui_shell_images.c",
     "yaogui_coin_images.c",
     "yaogui_table_image.c",
+    "yaogui_standby_images.c",
+    "yaogui_calendar_data.c",
 )
 
 
@@ -93,7 +99,7 @@ def rgb565(image: Image.Image) -> bytes:
 
 
 def image_descriptor(symbol: str, data: bytes, width: int, height: int, fmt: str) -> str:
-    stride = width * (4 if fmt == "ARGB8888" else 2)
+    stride = width * (4 if fmt == "ARGB8888" else 1 if fmt == "I8" else 2)
     return (
         f"static const uint8_t {symbol}_map[] = {{\n{c_bytes(data)}\n}};\n\n"
         f"const lv_image_dsc_t {symbol} = {{\n"
@@ -107,6 +113,45 @@ def image_descriptor(symbol: str, data: bytes, width: int, height: int, fmt: str
         f"    .data = {symbol}_map,\n"
         "};\n"
     )
+
+
+def indexed8_shared(images: list[Image.Image]) -> list[bytes]:
+    """将同组 RGBA 图像量化到共享的 255 色调色板；索引 0 保留为透明。"""
+    images = [image.convert("RGBA") for image in images]
+    width = sum(image.width for image in images)
+    height = max(image.height for image in images)
+    atlas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    offset = 0
+    offsets = []
+    for image in images:
+        atlas.alpha_composite(image, (offset, 0))
+        offsets.append(offset)
+        offset += image.width
+
+    quantized = atlas.quantize(
+        colors=255,
+        method=Image.Quantize.FASTOCTREE,
+        dither=Image.Dither.NONE,
+    )
+    rgba_palette = quantized.getpalette("RGBA")
+    palette = bytearray(256 * 4)
+    for source_index in range(255):
+        base = source_index * 4
+        red, green, blue, alpha = rgba_palette[base : base + 4]
+        target = (source_index + 1) * 4
+        palette[target : target + 4] = bytes((blue, green, red, alpha))
+
+    frames = []
+    for image, left in zip(images, offsets):
+        indexes = bytearray()
+        for y in range(image.height):
+            for x in range(image.width):
+                if image.getpixel((x, y))[3] == 0:
+                    indexes.append(0)
+                else:
+                    indexes.append(quantized.getpixel((left + x, y)) + 1)
+        frames.append(bytes(palette + indexes))
+    return frames
 
 
 def transparent_black(image: Image.Image) -> Image.Image:
@@ -174,20 +219,39 @@ def write_images(output_dir: Path) -> None:
         transparent_black(Image.open(ASSETS / "images" / "coin_front.png")),
         transparent_black(Image.open(ASSETS / "images" / "coin_back.png")),
     )
+    # 真机不做 LVGL 软件缩放。把 36px 铜钱预先画进 52px 透明帧，
+    # 保持原运动坐标和中心点，同时避免每帧 transform_and_recolor。
+    coin_frames = []
+    for source in coin_source:
+        frame = Image.new("RGBA", (52, 52), (0, 0, 0, 0))
+        scaled = source.resize((36, 36), Image.Resampling.NEAREST)
+        frame.alpha_composite(scaled, (8, 8))
+        coin_frames.append(frame)
+    coin_indexed = indexed8_shared(coin_frames)
     coin_text = '#include "yaogui_shell_images.h"\n\n'
-    coin_text += image_descriptor("yaogui_coin_front", argb8888(coin_source[0]), 52, 52, "ARGB8888")
+    coin_text += image_descriptor(
+        "yaogui_coin_front", coin_indexed[0], 52, 52, "I8"
+    )
     coin_text += "\n" + image_descriptor(
-        "yaogui_coin_back", argb8888(coin_source[1]), 52, 52, "ARGB8888"
+        "yaogui_coin_back", coin_indexed[1], 52, 52, "I8"
     )
     (output_dir / "yaogui_coin_images.c").write_text(coin_text, encoding="utf-8")
 
     source = Image.open(ASSETS / "images" / "yaogui_shell_faces.jpg")
-    back = crop_shell(source, (380, 215, 1180, 1225))
-    belly = crop_shell(source, (1370, 215, 2185, 1225))
+    # 原运行时比例为 300/256。构建期放大后，真机只移动坐标。
+    back = crop_shell(source, (380, 215, 1180, 1225)).resize(
+        (61, 75), Image.Resampling.NEAREST
+    )
+    belly = crop_shell(source, (1370, 215, 2185, 1225)).resize(
+        (61, 75), Image.Resampling.NEAREST
+    )
+    shell_indexed = indexed8_shared([back, belly])
     shell_text = '#include "yaogui_shell_images.h"\n\n'
-    shell_text += image_descriptor("yaogui_shell_back", argb8888(back), 52, 64, "ARGB8888")
+    shell_text += image_descriptor(
+        "yaogui_shell_back", shell_indexed[0], 61, 75, "I8"
+    )
     shell_text += "\n" + image_descriptor(
-        "yaogui_shell_belly", argb8888(belly), 52, 64, "ARGB8888"
+        "yaogui_shell_belly", shell_indexed[1], 61, 75, "I8"
     )
     (output_dir / "yaogui_shell_images.c").write_text(shell_text, encoding="utf-8")
 
@@ -204,12 +268,67 @@ def write_images(output_dir: Path) -> None:
     table_text += image_descriptor("yaogui_table_image", table_data, 214, 214, "RGB565")
     (output_dir / "yaogui_table_image.c").write_text(table_text, encoding="utf-8")
 
+    standby_dir = ASSETS / "images" / "standby"
+    standby_specs = (
+        ("yaogui_sundial_base", "day-sundial-base.png", (167, 184)),
+        ("yaogui_sundial_face", "day-sundial-face.png", (167, 184)),
+        ("yaogui_sundial_gnomon", "day-sundial-gnomon.png", (167, 184)),
+        ("yaogui_clep_pot_ri", "night-clep-pot-ri.png", (30, 27)),
+        ("yaogui_clep_pot_yue", "night-clep-pot-yue.png", (33, 27)),
+        ("yaogui_clep_pot_xing", "night-clep-pot-xing.png", (34, 24)),
+        ("yaogui_clep_pot_shou", "night-clep-pot-shou.png", (39, 40)),
+        ("yaogui_clep_arrow", "night-clepsydra-arrow.png", (11, 84)),
+    )
+    standby_text = '#include "yaogui_standby_images.h"\n\n'
+    for symbol, filename, size in standby_specs:
+        image = Image.open(standby_dir / filename).convert("RGBA")
+        image = image.resize(size, Image.Resampling.NEAREST)
+        standby_text += image_descriptor(
+            symbol, argb8888(image), image.width, image.height, "ARGB8888"
+        )
+        standby_text += "\n"
+
+    drop_sheet = Image.open(
+        standby_dir / "night-clepsydra-drop-sheet.png"
+    ).convert("RGBA")
+    for frame in range(2):
+        image = drop_sheet.crop((frame * 20, 0, frame * 20 + 20, 28))
+        image = image.resize((7, 10), Image.Resampling.NEAREST)
+        standby_text += image_descriptor(
+            f"yaogui_clep_drop_{frame}",
+            argb8888(image),
+            image.width,
+            image.height,
+            "ARGB8888",
+        )
+        standby_text += "\n"
+    (output_dir / "yaogui_standby_images.c").write_text(
+        standby_text, encoding="utf-8"
+    )
+
 
 def source_characters() -> str:
-    text = "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in (VIEW / "yaogui_view.c", VIEW / "yaogui_logic.c", VIEW / "yaogui_text_data.c")
+    ui_sources = (
+        VIEW / "yaogui_view.c",
+        VIEW / "yaogui_standby.c",
+        VIEW / "yaogui_logic.c",
+        VIEW / "yaogui_text_data.c",
+        ROOT / "main" / "yaogui_app.c",
+        ROOT / "simulator" / "main.c",
     )
+    text = "\n".join(
+        path.read_text(encoding="utf-8") for path in ui_sources
+    )
+    return "".join(sorted(set(re.findall(r"[\u3000-\u9fff]", text))))
+
+
+def standby_characters() -> str:
+    sources = (
+        VIEW / "yaogui_standby.c",
+        ROOT / "main" / "yaogui_app.c",
+        ROOT / "simulator" / "main.c",
+    )
+    text = "\n".join(path.read_text(encoding="utf-8") for path in sources)
     return "".join(sorted(set(re.findall(r"[\u3000-\u9fff]", text))))
 
 
@@ -289,6 +408,14 @@ def generate(output_dir: Path) -> None:
         raise SystemExit("missing node_modules; run `npm ci` first")
     output_dir.mkdir(parents=True, exist_ok=True)
     write_images(output_dir)
+    subprocess.run(
+        [
+            "node",
+            str(ROOT / "tools" / "generate_calendar.js"),
+            str(output_dir / "yaogui_calendar_data.c"),
+        ],
+        check=True,
+    )
     write_audio(
         ASSETS / "audio" / "coin_ritual.wav",
         output_dir / "yaogui_coin_sound.c",
@@ -301,9 +428,22 @@ def generate(output_dir: Path) -> None:
         "yaogui_ambient_sound",
         "yaogui_ambient_sound.h",
     )
+    calendar_chars = "".join(
+        sorted(
+            set(
+                re.findall(
+                    r"[\u3000-\u9fff]",
+                    (output_dir / "yaogui_calendar_data.c").read_text(
+                        encoding="utf-8"
+                    ),
+                )
+            )
+        )
+    )
     all_chars = (
         "".join(chr(value) for value in range(32, 127))
         + source_characters()
+        + calendar_chars
         + UI_SYMBOLS
     )
     names = hexagram_names()
@@ -332,6 +472,46 @@ def generate(output_dir: Path) -> None:
         18,
         4,
         names + "之",
+    )
+    write_font(
+        output_dir,
+        "yaogui_clock_28.c",
+        "xique-wanrenzao.ttf",
+        28,
+        4,
+        "0123456789:-",
+    )
+    write_font(
+        output_dir,
+        "yaogui_standby_display_12.c",
+        "xique-juzhenti.ttf",
+        12,
+        4,
+        "农历年月闰正一二三四五六七八九十冬腊初廿"
+        "甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥等待校时",
+    )
+    write_font(
+        output_dir,
+        "yaogui_standby_calendar_10.c",
+        "xique-juzhenti.ttf",
+        10,
+        4,
+        " 甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥年月日"
+        "立春雨水惊蛰春分清明谷雨立夏小满芒种夏至小暑大暑"
+        "立秋处暑白露秋分寒露霜降立冬小雪大雪冬至小寒大寒",
+    )
+    write_font(
+        output_dir,
+        "yaogui_standby_pixel_10.c",
+        "fusion-pixel-10px-proportional-zh_hans.otf",
+        10,
+        1,
+        "".join(chr(value) for value in range(32, 127))
+        + calendar_chars
+        + standby_characters()
+        + "·",
+        "fusion-pixel-12px-proportional-zh_hans.otf",
+        "磉",
     )
 
 

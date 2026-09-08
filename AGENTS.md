@@ -19,6 +19,7 @@ This file is the only mandatory entry point for AI-assisted work in this reposit
 - Button callbacks must stay non-blocking. Audio, storage, networking, and other slow operations belong in worker tasks.
 - A demo must stop every task, timer, callback, and event handler that can access its UI before deleting the screen.
 - Keep testable state machines, protocols, timing, and layout calculations independent from ESP-IDF/LVGL and cover them with host tests.
+- Treat font coverage as a hard build invariant. Every static, dynamic, runtime-formatted, and build-time-generated UI string must contribute its complete character set to asset generation; after conversion, verify every requested glyph exists and fail the build on any omission. Never approve text rendering from source review alone.
 - Never commit credentials, device QR secrets, private keys, personal data, or unsanitized logs.
 - Every maintained Markdown document uses English at its default `.md` path and Simplified Chinese in a paired `.zh_CN.md` file. Keep both versions aligned and retain reciprocal language links.
 

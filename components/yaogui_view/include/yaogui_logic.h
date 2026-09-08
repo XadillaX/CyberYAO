@@ -15,6 +15,7 @@
 #define YAOGUI_LANDING_TOTAL_MS                                                \
   (YAOGUI_LANDING_MS + (YAOGUI_SHELL_COUNT - 1U) * YAOGUI_SHELL_STAGGER_MS)
 #define YAOGUI_ARENA_WIDTH 196
+#define YAOGUI_ARENA_HEIGHT 196
 #define YAOGUI_SHELL_WIDTH 52
 #define YAOGUI_SHELL_HEIGHT 64
 #define YAOGUI_MAX_READING_PAGES 2
@@ -120,7 +121,9 @@ typedef struct {
   uint8_t line_count;
   uint32_t motion_seed;
   int16_t start_x[YAOGUI_SHELL_COUNT];
+  int16_t start_y[YAOGUI_SHELL_COUNT];
   int16_t velocity_x[YAOGUI_SHELL_COUNT];
+  int16_t velocity_y[YAOGUI_SHELL_COUNT];
   uint16_t hop_ms[YAOGUI_SHELL_COUNT];
   uint8_t height[YAOGUI_SHELL_COUNT];
   int16_t angle_start[YAOGUI_SHELL_COUNT];

@@ -71,20 +71,33 @@ static int absolute(int value) {
 static void test_seeded_physics_and_non_overlapping_landing(void) {
   yaogui_model_t first;
   yaogui_model_t second;
+  yaogui_model_t different;
   const uint8_t result[YAOGUI_SHELL_COUNT] = {1, 0, 1};
   yaogui_model_init(&first);
   yaogui_model_init(&second);
+  yaogui_model_init(&different);
   assert(yaogui_model_start_seeded(&first, 200, UINT32_C(0x12345678)));
   assert(yaogui_model_start_seeded(&second, 200, UINT32_C(0x12345678)));
+  assert(yaogui_model_start_seeded(&different, 200, UINT32_C(0x87654321)));
   assert(memcmp(first.start_x, second.start_x, sizeof(first.start_x)) == 0);
   assert(memcmp(first.target_x, second.target_x, sizeof(first.target_x)) == 0);
   assert(first.start_x[0] != first.start_x[1] ||
          first.velocity_x[0] != first.velocity_x[1]);
+  assert(
+      memcmp(first.target_x, different.target_x, sizeof(first.target_x)) != 0 ||
+      memcmp(first.target_y, different.target_y, sizeof(first.target_y)) != 0 ||
+      memcmp(first.target_angle,
+             different.target_angle,
+             sizeof(first.target_angle)) != 0);
 
   yaogui_shell_motion_t moving;
   yaogui_model_motion(&first, 4200, 0, &moving);
   assert(!moving.landed);
   yaogui_model_complete(&first, result, YAOGUI_SOURCE_ESP32_RF, 4200);
+  yaogui_shell_motion_t edge_on;
+  yaogui_model_motion(&first, 4200 + YAOGUI_LANDING_MS / 2U, 0, &edge_on);
+  assert(edge_on.scale_x <= 34);
+  assert(edge_on.belly == (result[0] != 0));
   uint32_t done = 4200 + YAOGUI_LANDING_TOTAL_MS;
   yaogui_model_tick(&first, done);
   assert(first.phase == YAOGUI_RESULT);
@@ -378,8 +391,13 @@ static void test_reading_key_flow(void) {
   assert(!yaogui_model_key(&model, YAOGUI_KEY_OK, 15, 1));
   assert(!model.reading.open && model.phase == YAOGUI_RESULT);
 
-  assert(yaogui_model_key(&model, YAOGUI_KEY_OK_LONG, 20, 2));
+  assert(!yaogui_model_key(&model, YAOGUI_KEY_OK_LONG, 20, 2));
+  assert(model.phase == YAOGUI_READY);
+  assert(model.line_count == 0);
+  assert(yaogui_model_key(&model, YAOGUI_KEY_OK, 21, 3));
   assert(model.phase == YAOGUI_ROLLING);
+  assert(!yaogui_model_key(&model, YAOGUI_KEY_OK_LONG, 22, 4));
+  assert(model.phase == YAOGUI_READY);
   assert(model.line_count == 0);
 }
 

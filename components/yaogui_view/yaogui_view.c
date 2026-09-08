@@ -2,17 +2,32 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "ui_pixel.h"
 #include "yaogui_shell_images.h"
+#include "yaogui_standby.h"
 #include "yaogui_table_image.h"
 
-#define COIN_SCALE 176U
-#define CENTER_SHELL_SCALE 300U
+#define COIN_FRAME_SIZE 40
+#define SHELL_FRAME_SIZE 84
+#define SOURCE_PIXEL_BYTES 4
+#define INDEXED_PALETTE_COLORS 256
+#define INDEXED_PALETTE_BYTES (INDEXED_PALETTE_COLORS * 4)
+#define INDEXED_FRAME_BYTES(size) (INDEXED_PALETTE_BYTES + (size) * (size))
 
 LV_FONT_DECLARE(yaogui_font_14)
 LV_FONT_DECLARE(yaogui_classic_14)
 LV_FONT_DECLARE(yaogui_mifu_18)
+
+typedef struct {
+  const lv_image_dsc_t* source;
+  int16_t angle;
+  uint16_t scale_x;
+  uint16_t scale_y;
+  bool valid;
+} sprite_frame_state_t;
+
 struct yaogui_view {
   lv_obj_t* screen;
   lv_obj_t* table;
@@ -39,7 +54,153 @@ struct yaogui_view {
   lv_obj_t* reading_footer;
   uint8_t rendered_reading_page;
   bool reading_rendered;
+  yaogui_standby_t* standby;
+  lv_obj_t* time_sync_panel;
+  lv_obj_t* time_sync_label;
+  _Alignas(4) uint8_t
+      coin_pixels[YAOGUI_SHELL_COUNT][INDEXED_FRAME_BYTES(COIN_FRAME_SIZE)];
+  lv_image_dsc_t coin_frames[YAOGUI_SHELL_COUNT];
+  sprite_frame_state_t coin_frame_states[YAOGUI_SHELL_COUNT];
+  _Alignas(4) uint8_t shell_pixels[INDEXED_FRAME_BYTES(SHELL_FRAME_SIZE)];
+  lv_image_dsc_t shell_frame;
+  sprite_frame_state_t shell_frame_state;
 };
+
+static const int16_t ROTATION_COS_Q14[32] = {
+    16384,  16069,  15137,  13623,  11585,  9102,   6270,   3196,
+    0,      -3196,  -6270,  -9102,  -11585, -13623, -15137, -16069,
+    -16384, -16069, -15137, -13623, -11585, -9102,  -6270,  -3196,
+    0,      3196,   6270,   9102,   11585,  13623,  15137,  16069,
+};
+
+static const int16_t ROTATION_SIN_Q14[32] = {
+    0,      3196,   6270,   9102,   11585,  13623,  15137,  16069,
+    16384,  16069,  15137,  13623,  11585,  9102,   6270,   3196,
+    0,      -3196,  -6270,  -9102,  -11585, -13623, -15137, -16069,
+    -16384, -16069, -15137, -13623, -11585, -9102,  -6270,  -3196,
+};
+
+static void rotation_components(int16_t angle, int32_t* cosine, int32_t* sine) {
+  int32_t normalized = angle % 3600;
+  if (normalized < 0) normalized += 3600;
+  int32_t signed_angle = normalized > 1800 ? normalized - 3600 : normalized;
+  int32_t absolute = signed_angle < 0 ? -signed_angle : signed_angle;
+
+  /* Web 龟壳在 ±2.4° 内细微摇动，单独保留这三个像素角度。 */
+  if (absolute <= 30) {
+    if (absolute >= 20) {
+      *cosine = 16370;
+      *sine = 686;
+    } else if (absolute >= 8) {
+      *cosine = 16378;
+      *sine = 457;
+    } else if (absolute > 0) {
+      *cosine = 16382;
+      *sine = 229;
+    } else {
+      *cosine = 16384;
+      *sine = 0;
+    }
+    if (signed_angle < 0) *sine = -*sine;
+    return;
+  }
+
+  uint32_t index = ((uint32_t)normalized * 32U + 1800U) / 3600U;
+  index %= 32U;
+  *cosine = ROTATION_COS_Q14[index];
+  *sine = ROTATION_SIN_Q14[index];
+}
+
+static void initialize_frame(lv_image_dsc_t* frame,
+                             uint8_t* pixels,
+                             uint16_t width,
+                             uint16_t height) {
+  memset(pixels, 0, INDEXED_PALETTE_BYTES);
+  for (uint16_t index = 1; index < INDEXED_PALETTE_COLORS; index++) {
+    uint16_t color = index - 1U;
+    pixels[index * 4U] = (uint8_t)((color & 0x03U) * 85U);
+    pixels[index * 4U + 1U] = (uint8_t)(((color >> 2U) & 0x07U) * 255U / 7U);
+    pixels[index * 4U + 2U] = (uint8_t)(((color >> 5U) & 0x07U) * 255U / 7U);
+    pixels[index * 4U + 3U] = 255U;
+  }
+  *frame = (lv_image_dsc_t){
+      .header.magic = LV_IMAGE_HEADER_MAGIC,
+      .header.cf = LV_COLOR_FORMAT_I8,
+      .header.flags = 0,
+      .header.w = width,
+      .header.h = height,
+      .header.stride = width,
+      .data_size = INDEXED_PALETTE_BYTES + (uint32_t)width * height,
+      .data = pixels,
+  };
+}
+
+static bool render_sprite_frame(const lv_image_dsc_t* source,
+                                lv_image_dsc_t* frame,
+                                sprite_frame_state_t* state,
+                                int16_t angle,
+                                uint16_t scale_x,
+                                uint16_t scale_y) {
+  if (!source || !frame || !state || scale_x == 0 || scale_y == 0) return false;
+  if (state->valid && state->source == source && state->angle == angle &&
+      state->scale_x == scale_x && state->scale_y == scale_y)
+    return false;
+
+  const int source_width = source->header.w;
+  const int source_height = source->header.h;
+  const int frame_width = frame->header.w;
+  const int frame_height = frame->header.h;
+  const bool source_indexed = source->header.cf == LV_COLOR_FORMAT_I8;
+  const uint8_t* source_pixels =
+      source->data + (source_indexed ? INDEXED_PALETTE_BYTES : 0);
+  uint8_t* frame_pixels = (uint8_t*)frame->data + INDEXED_PALETTE_BYTES;
+  int32_t cosine = 0;
+  int32_t sine = 0;
+  rotation_components(angle, &cosine, &sine);
+  if (source_indexed)
+    memcpy((uint8_t*)frame->data, source->data, INDEXED_PALETTE_BYTES);
+  memset(frame_pixels, 0, (size_t)frame_width * frame_height);
+
+  for (int y = 0; y < frame_height; y++) {
+    const int dy = y - frame_height / 2;
+    for (int x = 0; x < frame_width; x++) {
+      const int dx = x - frame_width / 2;
+      const int32_t rotated_x = cosine * dx + sine * dy;
+      const int32_t rotated_y = -sine * dx + cosine * dy;
+      const int source_x = source_width / 2 + (int)((rotated_x * 256) /
+                                                    (16384 * (int32_t)scale_x));
+      const int source_y =
+          source_height / 2 +
+          (int)((rotated_y * 256) / (16384 * (int32_t)scale_y));
+      if (source_x < 0 || source_x >= source_width || source_y < 0 ||
+          source_y >= source_height)
+        continue;
+      if (source_indexed) {
+        frame_pixels[(size_t)y * frame_width + x] =
+            source_pixels[(size_t)source_y * source->header.stride + source_x];
+      } else {
+        const size_t source_offset =
+            ((size_t)source_y * source_width + source_x) * SOURCE_PIXEL_BYTES;
+        if (source_pixels[source_offset + 3U] < 32U) continue;
+        uint16_t color =
+            (uint16_t)((source_pixels[source_offset + 2U] >> 5U) << 5U);
+        color |= (uint16_t)((source_pixels[source_offset + 1U] >> 5U) << 2U);
+        color |= source_pixels[source_offset] >> 6U;
+        if (color == 255U) color = 254U;
+        frame_pixels[(size_t)y * frame_width + x] = (uint8_t)(color + 1U);
+      }
+    }
+  }
+
+  *state = (sprite_frame_state_t){
+      .source = source,
+      .angle = angle,
+      .scale_x = scale_x,
+      .scale_y = scale_y,
+      .valid = true,
+  };
+  return true;
+}
 
 static void set_hidden(lv_obj_t* object, bool hidden) {
   if (hidden)
@@ -183,25 +344,22 @@ static lv_obj_t* create_shadow(lv_obj_t* parent, int x) {
   return shadow;
 }
 
-static lv_obj_t* create_coin(lv_obj_t* parent, int x) {
+static lv_obj_t* create_coin(lv_obj_t* parent,
+                             int x,
+                             const lv_image_dsc_t* frame) {
   lv_obj_t* shell = lv_image_create(parent);
   lv_obj_remove_flag(shell, LV_OBJ_FLAG_SCROLLABLE);
-  lv_image_set_src(shell, &yaogui_coin_back);
-  lv_obj_set_pos(shell, x, 72);
-  lv_obj_set_style_transform_pivot_x(shell, YAOGUI_SHELL_WIDTH / 2, 0);
-  lv_obj_set_style_transform_pivot_y(shell, YAOGUI_SHELL_WIDTH / 2, 0);
+  lv_image_set_src(shell, frame);
+  lv_obj_set_pos(shell, x + 6, 78);
   return shell;
 }
 
-static lv_obj_t* create_center_shell(lv_obj_t* parent) {
+static lv_obj_t* create_center_shell(lv_obj_t* parent,
+                                     const lv_image_dsc_t* frame) {
   lv_obj_t* shell = lv_image_create(parent);
   lv_obj_remove_flag(shell, LV_OBJ_FLAG_SCROLLABLE);
-  lv_image_set_src(shell, &yaogui_shell_back);
-  lv_obj_set_pos(shell, 81, 70);
-  lv_obj_set_style_transform_pivot_x(shell, YAOGUI_SHELL_WIDTH / 2, 0);
-  lv_obj_set_style_transform_pivot_y(shell, YAOGUI_SHELL_HEIGHT / 2, 0);
-  lv_obj_set_style_transform_scale_x(shell, CENTER_SHELL_SCALE, 0);
-  lv_obj_set_style_transform_scale_y(shell, CENTER_SHELL_SCALE, 0);
+  lv_image_set_src(shell, frame);
+  lv_obj_set_pos(shell, 65, 60);
   return shell;
 }
 
@@ -340,6 +498,26 @@ static void render_reading(yaogui_view_t* view,
   view->reading_rendered = true;
 }
 
+static void render_time_sync_indicator(yaogui_view_t* view,
+                                       const yaogui_view_state_t* state) {
+  if (state->time_sync_indicator == YAOGUI_TIME_SYNC_IDLE) {
+    set_hidden(view->time_sync_panel, true);
+    return;
+  }
+  char text[32];
+  if (state->time_sync_indicator == YAOGUI_TIME_SYNC_WAITING) {
+    static const char* const frames[] = {"|", "/", "-", "\\"};
+    const char* frame = frames[(state->now_ms / 150U) % 4U];
+    snprintf(text, sizeof(text), "蓝牙校时 %s", frame);
+  } else if (state->time_sync_indicator == YAOGUI_TIME_SYNC_SUCCESS) {
+    snprintf(text, sizeof(text), "校时完成");
+  } else {
+    snprintf(text, sizeof(text), "校时超时");
+  }
+  lv_label_set_text(view->time_sync_label, text);
+  set_hidden(view->time_sync_panel, false);
+}
+
 yaogui_view_t* yaogui_view_create(void) {
   yaogui_view_t* view = calloc(1, sizeof(*view));
   if (!view) return NULL;
@@ -362,11 +540,35 @@ yaogui_view_t* yaogui_view_create(void) {
   lv_image_set_src(table_image, &yaogui_table_image);
   lv_obj_set_pos(table_image, 0, 0);
 
+  for (size_t i = 0; i < YAOGUI_SHELL_COUNT; i++) {
+    initialize_frame(&view->coin_frames[i],
+                     view->coin_pixels[i],
+                     COIN_FRAME_SIZE,
+                     COIN_FRAME_SIZE);
+    (void)render_sprite_frame(&yaogui_coin_back,
+                              &view->coin_frames[i],
+                              &view->coin_frame_states[i],
+                              0,
+                              256,
+                              256);
+  }
+  initialize_frame(&view->shell_frame,
+                   view->shell_pixels,
+                   SHELL_FRAME_SIZE,
+                   SHELL_FRAME_SIZE);
+  (void)render_sprite_frame(&yaogui_shell_back,
+                            &view->shell_frame,
+                            &view->shell_frame_state,
+                            0,
+                            256,
+                            256);
+
   for (size_t i = 0; i < YAOGUI_SHELL_COUNT; i++)
     view->shadows[i] = create_shadow(view->table, 8 + (int)i * 64);
   for (size_t i = 0; i < YAOGUI_SHELL_COUNT; i++)
-    view->shells[i] = create_coin(view->table, 8 + (int)i * 64);
-  view->center_shell = create_center_shell(view->table);
+    view->shells[i] =
+        create_coin(view->table, 8 + (int)i * 64, &view->coin_frames[i]);
+  view->center_shell = create_center_shell(view->table, &view->shell_frame);
 
   lv_obj_t* result_panel =
       create_block(view->screen, 6, 226, 228, 88, 0xF2E8D1);
@@ -394,6 +596,23 @@ yaogui_view_t* yaogui_view_create(void) {
   lv_obj_set_size(view->status, 159, 68);
   lv_obj_set_style_text_align(view->status, LV_TEXT_ALIGN_CENTER, 0);
   create_reading_panel(view);
+  view->standby = yaogui_standby_create(view->screen);
+  if (!view->standby) {
+    lv_obj_delete(view->screen);
+    free(view);
+    return NULL;
+  }
+  view->time_sync_panel =
+      create_block(view->screen, 68, 147, 104, 26, 0xF7EEDB);
+  lv_obj_set_style_border_width(view->time_sync_panel, 2, 0);
+  lv_obj_set_style_border_color(
+      view->time_sync_panel, lv_color_hex(0xA73529), 0);
+  view->time_sync_label =
+      ui_pixel_label(view->time_sync_panel, "", &yaogui_font_14, 0x352014);
+  lv_obj_set_size(view->time_sync_label, 100, 18);
+  lv_obj_center(view->time_sync_label);
+  lv_obj_set_style_text_align(view->time_sync_label, LV_TEXT_ALIGN_CENTER, 0);
+  set_hidden(view->time_sync_panel, true);
   return view;
 }
 
@@ -409,6 +628,21 @@ lv_obj_t* yaogui_view_screen(yaogui_view_t* view) {
 
 void yaogui_view_render(yaogui_view_t* view, const yaogui_view_state_t* state) {
   if (!view || !state || !state->model) return;
+  yaogui_standby_set_visible(view->standby, state->standby);
+  render_time_sync_indicator(view, state);
+  if (state->standby) {
+    yaogui_standby_render(view->standby,
+                          state->now_ms,
+                          state->battery_percent,
+                          state->minute_of_day,
+                          state->date_text,
+                          state->year,
+                          state->month,
+                          state->day,
+                          state->time_valid,
+                          state->standby_worst_case);
+    return;
+  }
   const yaogui_model_t* model = state->model;
   set_hidden(view->table, model->reading.open);
   set_hidden(view->bottom_panel, model->reading.open);
@@ -429,17 +663,22 @@ void yaogui_view_render(yaogui_view_t* view, const yaogui_view_state_t* state) {
      * 三钱法约定：字面记 2（阴），背面记 3（阳）。
      * motion.belly 表示本枚取值为 1，即应显示无字背面。
      */
-    lv_image_set_src(view->shells[i],
-                     motion.belly ? &yaogui_coin_back : &yaogui_coin_front);
-    lv_obj_set_pos(view->shells[i], motion.x, motion.y);
-    lv_obj_set_style_transform_rotation(view->shells[i], motion.rotation, 0);
-    lv_obj_set_style_transform_scale_x(
-        view->shells[i], (motion.scale_x * COIN_SCALE) / 256U, 0);
-    lv_obj_set_style_transform_scale_y(
-        view->shells[i], (motion.scale_y * COIN_SCALE) / 256U, 0);
-    lv_obj_set_pos(view->shadows[i], motion.x + 11, motion.y + 39);
-    lv_obj_set_style_transform_scale_x(
-        view->shadows[i], (motion.shadow_scale * COIN_SCALE) / 256U, 0);
+    const lv_image_dsc_t* coin_source =
+        motion.belly ? &yaogui_coin_back : &yaogui_coin_front;
+    if (render_sprite_frame(coin_source,
+                            &view->coin_frames[i],
+                            &view->coin_frame_states[i],
+                            motion.rotation,
+                            motion.scale_x,
+                            motion.scale_y))
+      lv_obj_invalidate(view->shells[i]);
+    lv_obj_set_pos(view->shells[i], motion.x + 6, motion.y + 6);
+    int shadow_width = (int)(40U * motion.shadow_scale * 176U / (256U * 256U));
+    if (shadow_width < 4) shadow_width = 4;
+    lv_obj_set_pos(view->shadows[i],
+                   motion.x + YAOGUI_SHELL_WIDTH / 2 - shadow_width / 2,
+                   motion.y + 39);
+    lv_obj_set_width(view->shadows[i], shadow_width);
     lv_obj_set_style_opa(view->shadows[i], motion.shadow_opa, 0);
     set_hidden(view->shadows[i],
                model->phase != YAOGUI_RESULT && !coins_dancing);
@@ -450,10 +689,10 @@ void yaogui_view_render(yaogui_view_t* view, const yaogui_view_state_t* state) {
       (model->phase == YAOGUI_ROLLING && roll_elapsed < YAOGUI_SHELL_HIDE_MS);
   set_hidden(view->center_shell, !show_center_shell);
   if (show_center_shell) {
-    int x = 81;
-    int y = 70;
+    int x = 65;
+    int y = 60;
     int16_t rotation = 0;
-    uint16_t scale = CENTER_SHELL_SCALE;
+    uint16_t scale = 256;
     if (model->phase == YAOGUI_ROLLING &&
         roll_elapsed < YAOGUI_SHELL_SHAKE_MS) {
       static const int8_t shake_x[] = {-3, 2, -2, 3, -1, 1};
@@ -470,12 +709,16 @@ void yaogui_view_render(yaogui_view_t* view, const yaogui_view_state_t* state) {
       x += (int)(170U * progress / 256U);
       y -= (int)(100U * progress / 256U);
       rotation = (int16_t)(700U * progress / 256U);
-      scale = (uint16_t)(CENTER_SHELL_SCALE - 80U * progress / 256U);
+      scale = (uint16_t)(256U - 68U * progress / 256U);
     }
+    if (render_sprite_frame(&yaogui_shell_back,
+                            &view->shell_frame,
+                            &view->shell_frame_state,
+                            rotation,
+                            scale,
+                            scale))
+      lv_obj_invalidate(view->center_shell);
     lv_obj_set_pos(view->center_shell, x, y);
-    lv_obj_set_style_transform_rotation(view->center_shell, rotation, 0);
-    lv_obj_set_style_transform_scale_x(view->center_shell, scale, 0);
-    lv_obj_set_style_transform_scale_y(view->center_shell, scale, 0);
   }
 
   render_hexagram_lines(view, model);

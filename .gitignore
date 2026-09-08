@@ -28,6 +28,7 @@ node_modules/
 /simulator/*.png
 /simulator/*.ppm
 /simulator/*.bmp
+/validation/
 
 # Logs and local configuration
 *.log
