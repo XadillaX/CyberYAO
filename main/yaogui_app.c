@@ -579,6 +579,13 @@ esp_err_t yaogui_app_start(void) {
   return ESP_OK;
 }
 
+void yaogui_app_request_time_sync_if_needed(void) {
+  if (yaogui_time_sync_required()) {
+    ESP_LOGI(TAG, "当前固件尚未校时或系统时间无效，启动校时热点");
+    request_time_sync();
+  }
+}
+
 void yaogui_app_key(bsp_btn_t btn, bsp_btn_ev_t ev, void* user) {
   (void)user;
   if (!s_key_events) return;

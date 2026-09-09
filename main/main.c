@@ -59,6 +59,8 @@ void app_main(void) {
   }
   if (err != ESP_OK) {
     ESP_LOGW(TAG, "时间同步服务启动失败: %s", esp_err_to_name(err));
+  } else {
+    yaogui_app_request_time_sync_if_needed();
   }
 
   err = bsp_button_init(yaogui_app_key, NULL);

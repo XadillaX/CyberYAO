@@ -19,6 +19,7 @@
 LV_FONT_DECLARE(yaogui_font_14)
 LV_FONT_DECLARE(yaogui_classic_14)
 LV_FONT_DECLARE(yaogui_mifu_18)
+LV_FONT_DECLARE(yaogui_standby_pixel_10)
 
 typedef struct {
   const lv_image_dsc_t* source;
@@ -46,6 +47,7 @@ struct yaogui_view {
   lv_obj_t* result_text;
   lv_obj_t* result_hint;
   lv_obj_t* status;
+  lv_obj_t* controls;
   lv_obj_t* reading_panel;
   lv_obj_t* reading_title;
   lv_obj_t* reading_badge;
@@ -57,7 +59,6 @@ struct yaogui_view {
   yaogui_standby_t* standby;
   lv_obj_t* time_sync_panel;
   lv_obj_t* time_sync_label;
-  lv_obj_t* time_sync_qr;
   lv_obj_t* time_sync_hint;
   _Alignas(4) uint8_t
       coin_pixels[YAOGUI_SHELL_COUNT][INDEXED_FRAME_BYTES(COIN_FRAME_SIZE)];
@@ -510,12 +511,11 @@ static void render_time_sync_indicator(yaogui_view_t* view,
   if (state->time_sync_indicator == YAOGUI_TIME_SYNC_WAITING) {
     static const char* const frames[] = {"|", "/", "-", "\\"};
     const char* frame = frames[(state->now_ms / 150U) % 4U];
-    snprintf(text, sizeof(text), "扫码加入开放 WiFi %s", frame);
-    lv_obj_set_pos(view->time_sync_panel, 13, 28);
-    lv_obj_set_size(view->time_sync_panel, 214, 264);
+    snprintf(text, sizeof(text), "校时热点已开启 %s", frame);
+    lv_obj_set_pos(view->time_sync_panel, 13, 56);
+    lv_obj_set_size(view->time_sync_panel, 214, 208);
     lv_obj_set_pos(view->time_sync_label, 5, 8);
     lv_obj_set_size(view->time_sync_label, 200, 20);
-    set_hidden(view->time_sync_qr, false);
     set_hidden(view->time_sync_hint, false);
   } else if (state->time_sync_indicator == YAOGUI_TIME_SYNC_SUCCESS) {
     snprintf(text, sizeof(text), "校时完成");
@@ -523,7 +523,6 @@ static void render_time_sync_indicator(yaogui_view_t* view,
     lv_obj_set_size(view->time_sync_panel, 150, 38);
     lv_obj_set_pos(view->time_sync_label, 5, 8);
     lv_obj_set_size(view->time_sync_label, 136, 20);
-    set_hidden(view->time_sync_qr, true);
     set_hidden(view->time_sync_hint, true);
   } else {
     snprintf(text, sizeof(text), "校时超时");
@@ -531,7 +530,6 @@ static void render_time_sync_indicator(yaogui_view_t* view,
     lv_obj_set_size(view->time_sync_panel, 150, 38);
     lv_obj_set_pos(view->time_sync_label, 5, 8);
     lv_obj_set_size(view->time_sync_label, 136, 20);
-    set_hidden(view->time_sync_qr, true);
     set_hidden(view->time_sync_hint, true);
   }
   lv_label_set_text(view->time_sync_label, text);
@@ -612,9 +610,16 @@ yaogui_view_t* yaogui_view_create(void) {
   lv_obj_set_size(view->result_hint, 106, 14);
   lv_obj_set_style_text_align(view->result_hint, LV_TEXT_ALIGN_CENTER, 0);
   view->status = ui_pixel_label(result_panel, "", &yaogui_font_14, UI_INK);
-  lv_obj_set_pos(view->status, 61, 9);
-  lv_obj_set_size(view->status, 159, 68);
+  lv_obj_set_pos(view->status, 61, 3);
+  lv_obj_set_size(view->status, 159, 32);
   lv_obj_set_style_text_align(view->status, LV_TEXT_ALIGN_CENTER, 0);
+  view->controls =
+      ui_pixel_label(result_panel, "", &yaogui_standby_pixel_10, 0x6D2F20);
+  lv_obj_set_pos(view->controls, 61, 42);
+  lv_obj_set_size(view->controls, 159, 42);
+  lv_obj_set_style_text_align(view->controls, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_style_text_line_space(view->controls, 0, 0);
+  lv_obj_set_style_text_line_space(view->status, 1, 0);
   create_reading_panel(view);
   view->standby = yaogui_standby_create(view->screen);
   if (!view->standby) {
@@ -632,22 +637,17 @@ yaogui_view_t* yaogui_view_create(void) {
   lv_obj_set_pos(view->time_sync_label, 5, 8);
   lv_obj_set_size(view->time_sync_label, 200, 20);
   lv_obj_set_style_text_align(view->time_sync_label, LV_TEXT_ALIGN_CENTER, 0);
-  view->time_sync_qr = lv_qrcode_create(view->time_sync_panel);
-  lv_qrcode_set_size(view->time_sync_qr, 164);
-  lv_qrcode_set_dark_color(view->time_sync_qr, lv_color_hex(0x352014));
-  lv_qrcode_set_light_color(view->time_sync_qr, lv_color_hex(0xF7EEDB));
-  lv_qrcode_set_quiet_zone(view->time_sync_qr, true);
-  lv_qrcode_set_data(view->time_sync_qr,
-                     "WIFI:T:nopass;S:CyberYAO-Time;H:false;;");
-  lv_obj_set_pos(view->time_sync_qr, 23, 37);
-  view->time_sync_hint =
-      ui_pixel_label(view->time_sync_panel,
-                     "连接后会自动弹出校时页\n未弹出请访问 192.168.4.1",
-                     &yaogui_font_14,
-                     0x6D2F20);
-  lv_obj_set_pos(view->time_sync_hint, 5, 211);
-  lv_obj_set_size(view->time_sync_hint, 200, 42);
-  lv_obj_set_style_text_align(view->time_sync_hint, LV_TEXT_ALIGN_CENTER, 0);
+  view->time_sync_hint = ui_pixel_label(view->time_sync_panel,
+                                        "01  打开手机 WiFi\n\n"
+                                        "02  连接 CyberYAO-Time\n\n"
+                                        "03  页面弹出后自动校时\n\n"
+                                        "备用 192.168.4.1",
+                                        &yaogui_font_14,
+                                        0x6D2F20);
+  lv_obj_set_pos(view->time_sync_hint, 12, 42);
+  lv_obj_set_size(view->time_sync_hint, 186, 150);
+  lv_label_set_long_mode(view->time_sync_hint, LV_LABEL_LONG_WRAP);
+  lv_obj_set_style_text_line_space(view->time_sync_hint, 2, 0);
   set_hidden(view->time_sync_panel, true);
   return view;
 }
@@ -759,10 +759,29 @@ void yaogui_view_render(yaogui_view_t* view, const yaogui_view_state_t* state) {
 
   render_hexagram_lines(view, model);
   const bool complete = model->line_count == YAOGUI_LINE_COUNT;
+  const bool show_controls =
+      model->phase == YAOGUI_READY && model->line_count == 0;
+  if (show_controls) {
+    for (size_t line = 0; line < YAOGUI_LINE_COUNT; line++) {
+      set_hidden(view->primary_solid[line], true);
+      set_hidden(view->primary_left[line], true);
+      set_hidden(view->primary_right[line], true);
+      set_hidden(view->changed_solid[line], true);
+      set_hidden(view->changed_left[line], true);
+      set_hidden(view->changed_right[line], true);
+      set_hidden(view->moving_mark[line], true);
+    }
+  }
   set_hidden(view->result_name, !complete);
   set_hidden(view->result_text, !complete);
   set_hidden(view->result_hint, !complete);
   set_hidden(view->status, complete);
+  set_hidden(view->controls, !show_controls);
+  lv_obj_set_pos(view->status, show_controls ? 8 : 61, show_controls ? 7 : 9);
+  lv_obj_set_size(
+      view->status, show_controls ? 212 : 159, show_controls ? 20 : 68);
+  lv_obj_set_pos(view->controls, 8, 31);
+  lv_obj_set_size(view->controls, 212, 48);
   if (complete) {
     const yaogui_hexagram_t* primary = NULL;
     const yaogui_hexagram_t* changed = NULL;
@@ -784,8 +803,17 @@ void yaogui_view_render(yaogui_view_t* view, const yaogui_view_state_t* state) {
       char line_number[16];
       format_chinese_number(
           (unsigned)model->line_count + 1U, line_number, sizeof(line_number));
-      lv_label_set_text_fmt(
-          view->status, "第%s爻·共六爻\n按确认键起卦", line_number);
+      if (show_controls) {
+        lv_label_set_text(view->status, "第一爻·共六爻");
+        lv_label_set_text(view->controls,
+                          "确认键起卦·上键待机\n"
+                          "长按确认键重置\n"
+                          "长按下键校时\n"
+                          "长按上键恢复");
+      } else {
+        lv_label_set_text_fmt(
+            view->status, "第%s爻·共六爻\n确认键起卦", line_number);
+      }
     } break;
     case YAOGUI_ROLLING: {
       char line_number[16];

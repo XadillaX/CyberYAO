@@ -9,6 +9,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "esp_app_desc.h"
 #include "esp_http_server.h"
 #include "esp_log.h"
 #include "esp_netif.h"
@@ -18,6 +19,7 @@
 #include "freertos/task.h"
 #include "lwip/inet.h"
 #include "lwip/ip4_addr.h"
+#include "nvs.h"
 #include "nvs_flash.h"
 
 static const char* TAG = "yaogui_time";
@@ -41,6 +43,9 @@ static volatile uint32_t s_error_generation;
 #define DNS_HEADER_SIZE 12
 #define DNS_ANSWER_SIZE 16
 #define DHCP_OFFER_DNS 0x02
+#define APP_ELF_SHA256_SIZE 32
+#define TIME_NVS_NAMESPACE "yaogui_time"
+#define TIME_NVS_SYNC_SHA "sync_sha"
 
 typedef enum {
   TIME_COMMAND_START,
@@ -367,6 +372,21 @@ static esp_err_t sync_handler(httpd_req_t* request) {
         request, HTTPD_500_INTERNAL_SERVER_ERROR, "Cannot set device time");
     return ESP_FAIL;
   }
+  nvs_handle_t nvs;
+  esp_err_t marker_error = nvs_open(TIME_NVS_NAMESPACE, NVS_READWRITE, &nvs);
+  if (marker_error == ESP_OK) {
+    const esp_app_desc_t* app = esp_app_get_description();
+    marker_error = nvs_set_blob(nvs,
+                                TIME_NVS_SYNC_SHA,
+                                app->app_elf_sha256,
+                                sizeof(app->app_elf_sha256));
+    if (marker_error == ESP_OK) marker_error = nvs_commit(nvs);
+    nvs_close(nvs);
+  }
+  if (marker_error != ESP_OK) {
+    ESP_LOGW(
+        TAG, "记录当前固件校时标记失败: %s", esp_err_to_name(marker_error));
+  }
   s_sync_generation++;
   ESP_LOGI(TAG,
            "Wi-Fi 校时完成: %04d-%02d-%02d %02d:%02d:%02d",
@@ -541,7 +561,7 @@ esp_err_t yaogui_time_sync_start(void) {
     s_commands = NULL;
     return ESP_ERR_NO_MEM;
   }
-  ESP_LOGI(TAG, "Wi-Fi 扫码校时服务已就绪");
+  ESP_LOGI(TAG, "Wi-Fi 校时服务已就绪");
   return ESP_OK;
 }
 
@@ -569,4 +589,21 @@ uint32_t yaogui_time_sync_generation(void) {
 
 uint32_t yaogui_time_sync_error_generation(void) {
   return s_error_generation;
+}
+
+bool yaogui_time_sync_required(void) {
+  const time_t current = time(NULL);
+  if (current < 1700000000) return true;
+
+  nvs_handle_t nvs;
+  esp_err_t error = nvs_open(TIME_NVS_NAMESPACE, NVS_READONLY, &nvs);
+  if (error != ESP_OK) return true;
+  uint8_t saved_sha[APP_ELF_SHA256_SIZE];
+  size_t saved_size = sizeof(saved_sha);
+  error = nvs_get_blob(nvs, TIME_NVS_SYNC_SHA, saved_sha, &saved_size);
+  nvs_close(nvs);
+  if (error != ESP_OK || saved_size != sizeof(saved_sha)) return true;
+
+  const esp_app_desc_t* app = esp_app_get_description();
+  return memcmp(saved_sha, app->app_elf_sha256, sizeof(saved_sha)) != 0;
 }

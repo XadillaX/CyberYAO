@@ -324,6 +324,7 @@ def source_characters() -> str:
 
 def standby_characters() -> str:
     sources = (
+        VIEW / "yaogui_view.c",
         VIEW / "yaogui_standby.c",
         ROOT / "main" / "yaogui_app.c",
         ROOT / "simulator" / "main.c",

@@ -20,5 +20,8 @@ uint32_t yaogui_time_sync_generation(void);
 /* 每次热点启动失败后递增，用于界面立即结束等待。 */
 uint32_t yaogui_time_sync_error_generation(void);
 
+/* 当前固件尚未成功校时，或系统时间已经失效时返回 true。 */
+bool yaogui_time_sync_required(void);
+
 /* Wi-Fi 热点射频已启动时，硬件随机源可直接使用，无需重复初始化。 */
 bool yaogui_time_sync_radio_ready(void);
