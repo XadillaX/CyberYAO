@@ -183,6 +183,7 @@ int main(int argc, char** argv) {
   bool snapshot_worst_case = false;
   bool snapshot_waiting = false;
   bool snapshot_time_sync = false;
+  bool snapshot_battery_full = false;
   int snapshot_minute = 12 * 60 + 28;
   if (force_standby && standby_minute_arg) {
     snapshot_minute = atoi(standby_minute_arg);
@@ -215,6 +216,9 @@ int main(int argc, char** argv) {
     } else if (strcmp(snapshot_mode, "standby-time-sync") == 0) {
       snapshot_minute = 12 * 60;
       snapshot_time_sync = true;
+    } else if (strcmp(snapshot_mode, "standby-battery-full") == 0) {
+      snapshot_minute = 12 * 60;
+      snapshot_battery_full = true;
     }
   }
   const bool interactive_audio = !smoke_test && !snapshot_path;
@@ -372,16 +376,17 @@ int main(int argc, char** argv) {
     const yaogui_view_state_t state = {
         .model = &model,
         .now_ms = now_ms,
-        .battery_percent = snapshot_waiting      ? -1
-                           : snapshot_worst_case ? 100
-                                                 : 86,
+        .battery_percent = snapshot_waiting                               ? -1
+                           : snapshot_worst_case || snapshot_battery_full ? 100
+                                                                          : 86,
         .standby = snapshot_standby || standby_active,
         .minute_of_day = snapshot_minute,
-        .date_text = snapshot_worst_case ? "2040年12月31日 · 星期三"
-                                         : "2026年9月7日 · 星期一",
+        .date_text = snapshot_worst_case     ? "2040年12月31日 · 星期三"
+                     : snapshot_battery_full ? "2026年9月12日 · 星期六"
+                                             : "2026年9月7日 · 星期一",
         .year = 2026,
         .month = 9,
-        .day = 7,
+        .day = snapshot_battery_full ? 12 : 7,
         .time_valid = !snapshot_waiting,
         .standby_worst_case = snapshot_worst_case,
         .time_sync_indicator = snapshot_time_sync ? YAOGUI_TIME_SYNC_WAITING

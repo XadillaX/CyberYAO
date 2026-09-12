@@ -42,12 +42,9 @@ Natural-language requirement
               └─ bsp_pins.h       Single source of truth for pins and hardware parameters
 ```
 
-新增普通页面时，创建 `main/demo_<feature>.c` 并实现 `enter`、`exit`、`key` 接口，然后同步修改：
-
-- `main/demo.h` 中的声明；
-- `main/CMakeLists.txt` 中的源文件；
-- `main/main.c` 的 `DEMOS[]` 注册；
-- 若有新的可选外设，菜单的初始化状态与失败降级。
+新增或修改页面时，在 `components/yaogui_view/` 维护 LVGL 对象与渲染，在
+`main/yaogui_app.c` 维护状态机、按键分发和后台任务。新增编译单元时同步更新对应
+`CMakeLists.txt`；若有新的可选外设，必须保留初始化失败时的降级路径。
 
 只有多个应用都会使用的硬件能力才进入 `components/bsp`。BSP API 需要说明阻塞性、线程上下文、内存所有权、失败值和初始化顺序；引脚或 I2C 地址只能加入 `bsp_pins.h`。
 

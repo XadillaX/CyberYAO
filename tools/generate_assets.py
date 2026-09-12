@@ -49,6 +49,19 @@ OUTPUTS = (
 )
 
 
+def validate_generated_manifest() -> None:
+    manifest = (
+        ROOT / "cmake" / "yaogui_generated_sources.cmake"
+    ).read_text(encoding="utf-8")
+    cmake_outputs = tuple(
+        re.findall(r"^\s+(yaogui_[a-z0-9_]+\.c)\s*$", manifest, re.MULTILINE)
+    )
+    if cmake_outputs != OUTPUTS:
+        raise ValueError(
+            "generated source manifest differs from tools/generate_assets.py"
+        )
+
+
 def c_bytes(data: bytes, width: int = 16) -> str:
     rows = []
     for offset in range(0, len(data), width):
@@ -407,16 +420,21 @@ def write_font(
 def generate(output_dir: Path) -> None:
     if not FONT_CONV.is_file():
         raise SystemExit("missing node_modules; run `npm ci` first")
+    validate_generated_manifest()
     output_dir.mkdir(parents=True, exist_ok=True)
     write_images(output_dir)
+    standby_calendar_charset = output_dir / ".standby-calendar-charset.txt"
     subprocess.run(
         [
             "node",
             str(ROOT / "tools" / "generate_calendar.js"),
             str(output_dir / "yaogui_calendar_data.c"),
+            str(standby_calendar_charset),
         ],
         check=True,
     )
+    standby_calendar_chars = standby_calendar_charset.read_text(encoding="utf-8")
+    standby_calendar_charset.unlink()
     write_audio(
         ASSETS / "audio" / "coin_ritual.wav",
         output_dir / "yaogui_coin_sound.c",
@@ -444,7 +462,6 @@ def generate(output_dir: Path) -> None:
     all_chars = (
         "".join(chr(value) for value in range(32, 127))
         + source_characters()
-        + calendar_chars
         + UI_SYMBOLS
     )
     names = hexagram_names()
@@ -497,9 +514,7 @@ def generate(output_dir: Path) -> None:
         "xique-juzhenti.ttf",
         10,
         4,
-        " 甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥年月日"
-        "立春雨水惊蛰春分清明谷雨立夏小满芒种夏至小暑大暑"
-        "立秋处暑白露秋分寒露霜降立冬小雪大雪冬至小寒大寒",
+        standby_calendar_chars,
     )
     write_font(
         output_dir,

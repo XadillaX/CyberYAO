@@ -30,7 +30,7 @@ This file is the only mandatory entry point for AI-assisted work in this reposit
 | Any code change | `docs/development/ai-guide.md`, relevant headers and neighboring implementation |
 | Environment bootstrap or missing toolchain | `docs/development/engineering/environment-setup.md` |
 | BSP, pins, buses, display, audio, battery | `docs/hardware-design/AI_HARDWARE_DEVELOPMENT_GUIDE.md`, `components/bsp/include/bsp_pins.h` |
-| Demo or menu | `main/demo.h`, `main/main.c`, the nearest `main/demo_*.c` implementation |
+| Application UI or key flow | `main/yaogui_app.c`, the relevant implementation under `components/yaogui_view/` |
 | Build, test, dependencies, partitions | `docs/development/engineering/build-and-test.md`, `docs/development/engineering/ble-recovery-compatibility.md`, `sdkconfig.defaults`, `partitions.csv` |
 | CI or release | the matching file in `docs/development/ci/CI-*.md` and `.github/workflows/` |
 | Project completion | `docs/development/release/project-completion.md` (then the `issue-suggestions` or `experience-pr` skill) |

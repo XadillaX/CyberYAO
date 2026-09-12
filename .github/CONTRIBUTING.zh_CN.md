@@ -35,15 +35,6 @@ idf.py flash monitor          # 可选：增量 app 烧录
 idf.py fullclean              # 配置过期时清空生成状态（勿用于清理用户源码改动）
 ```
 
-当前基线含一个可脱离硬件运行的纯逻辑测试：
-
-```bash
-cc -std=c11 -Wall -Wextra -Werror -Imain \
-  tests/test_ui_pixel_math.c main/ui_pixel_math.c \
-  -o /tmp/test_ui_pixel_math
-/tmp/test_ui_pixel_math
-```
-
 本仓库为本地开发和 CI 提供同一个验证入口：
 
 ```bash

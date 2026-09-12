@@ -77,8 +77,8 @@ LCD RST 和功放 PA 使能均定义为 `-1`：LCD 复位使用软件路径，�
 | I2S0 | 音频 BSP | TX/RX 全双工，共用 MCLK/BCLK/WS。 |
 | USB Serial/JTAG | 控制台配置 | GPIO18/19 属于当前控制台路径。 |
 | 内部 RAM/DMA | 显示、LVGL、音频、无线、任务 | 无 PSRAM；总空闲堆和最大连续块都必须检查。 |
-| NVS/网络 event loop | `demo_radio.c` | 为 Wi-Fi/BLE demo 一次性准备；初始化失败时不得擦除无关 NVS 数据。 |
-| Wi-Fi/BLE 协议栈 | 各自 demo 页面 | 当前页面进入时启动、退出时释放，不同时常驻。 |
+| NVS/网络 event loop | `yaogui_time_sync.c` | 仅在手机校时服务需要时准备；初始化失败时不得擦除无关 NVS 数据。 |
+| Wi-Fi 协议栈 | 手机校时服务 | 校时期间启动，成功、取消或超时后停止并释放。 |
 
 GPIO0 同时是按键 ADC 节点和 ESP32-C3 启动相关管脚；GPIO21 是背光输出，并与常见 UART0 TX 映射冲突。重分配引脚必须复核启动/烧录路径并完成实机验收。
 
@@ -93,22 +93,16 @@ GPIO0 同时是按键 ADC 节点和 ESP32-C3 启动相关管脚；GPIO21 是背�
 
 ```text
 app_main
-  ├─ bsp_i2c_init → bsp_i2c_scan
+  ├─ bsp_i2c_init
   ├─ bsp_display_init → bsp_lvgl_init → backlight 100%
-  ├─ bsp_button_init(on_key)
-  ├─ bsp_audio_init
   ├─ bsp_battery_init
-  └─ LVGL menu
-       ├─ Display demo
-       ├─ Button demo
-       ├─ Audio demo
-       ├─ Battery demo
-       ├─ Wi-Fi scan demo
-       ├─ Bluetooth LE advertising demo
-       └─ Low Power sleep-mode demo
+  ├─ yaogui_app_start
+  ├─ fap_screenshot_start
+  ├─ yaogui_time_sync_start
+  └─ bsp_button_init(yaogui_app_key)
 ```
 
-显示是 UI 的硬依赖，显示或 LVGL 初始化失败时 `app_main` 直接返回。按键、音频、电池是软依赖：初始化失败的菜单项显示 `[FAIL]`，其他页面仍可用。
+显示是 UI 的硬依赖，显示或 LVGL 初始化失败时 `app_main` 直接返回。电池是软依赖：初始化失败时隐藏电量，不阻止起卦；按键初始化失败会记录错误。
 
 公开 BSP API 位于 `components/bsp/include/`：
 
@@ -121,7 +115,7 @@ app_main
 
 驱动初始化大多设计为幂等，但当前没有统一 deinit API。不要假设可以在运行时反复销毁和重建总线/驱动。
 
-Wi-Fi、NimBLE 和 light/deep sleep 直接使用 ESP-IDF API，不属于板级 BSP。`demo_radio.c` 只管理 NVS、`esp_netif` 和默认 event loop 这些应用级共享前置。Wi-Fi 和 BLE 页在进入时初始化高内存占用的无线栈，退出时停止并释放；不自动抹除已有 NVS 数据来掩盖分区错误。deep sleep 会按 ESP32-C3 语义重启应用，示例用 RTC slow memory 记录唤醒次数。
+Wi-Fi 校时直接使用 ESP-IDF API，不属于板级 BSP。`yaogui_time_sync.c` 管理 NVS、`esp_netif`、默认 event loop、DNS 和 HTTP 服务；校时成功、取消或超时后停止并释放网络资源。当前待机只关闭背光，不进入 light/deep sleep，以保留卦象与动画状态。
 
 ## 5. 显示与 LVGL
 
@@ -137,7 +131,7 @@ Wi-Fi、NimBLE 和 light/deep sleep 直接使用 ESP-IDF API，不属于板级 B
 
 ### 5.2 LVGL 内存和线程规则
 
-ESP32-C3 无 PSRAM。当前 LVGL 显示缓冲为 `240 × 20` 像素的单 DMA 缓冲，RGB565 约 9.6 KB；`sdkconfig.defaults` 的 LVGL 内部池为 24 KB。不要直接改为大行数双缓冲，也不要扩大 UI 内存池而不检查内部 RAM、最大连续堆和 I2S DMA 初始化。
+ESP32-C3 无 PSRAM。当前 LVGL 显示缓冲为 `240 × 20` 像素的单 DMA 缓冲，RGB565 约 9.6 KB；`sdkconfig.defaults` 的 LVGL 内部池为 64 KB。不要直接改为大行数双缓冲，也不要扩大 UI 内存池而不检查内部 RAM、最大连续堆和 I2S DMA 初始化。
 
 LVGL 非线程安全：
 
@@ -209,9 +203,7 @@ MCU 是 I2S master，ES8311 是 slave；I2S0 的 TX/RX 全双工通道共享 MCL
 - `bsp_audio_read/write` 是阻塞调用，不能放在按键回调或 LVGL 任务中。
 - I2S DMA 当前为 6 个 descriptor、每个 240 frame。更改 DMA 或 LVGL buffer 前必须联合评估内部 RAM。
 
-Audio demo 使用独立 4 KB 栈任务：OK 播放 1 秒 1 kHz 方波，UP 录 3 秒再回放。录音缓冲约 96 KB，是当前最显著的瞬时堆分配，可能因碎片或其他功能增大而失败。新增长录音应优先采用分块流式处理或外部存储，不可假设存在 PSRAM。
-
-当前 demo 的退出会直接删除音频任务。如果任务正阻塞于 codec 读写，实际硬件上需特别验证退出行为；若扩展为生产逻辑，应设计可取消的分块循环与明确的任务退出握手。
+当前应用在工作任务中流式播放内嵌 PCM，不分配整段录音缓冲。新增录音或长音频功能时应继续采用分块流式处理，并设计可取消的循环与明确的任务退出握手。
 
 ## 9. CW2017 电池计
 
@@ -235,11 +227,10 @@ SOC 准确度取决于电芯与 profile 的匹配程度。本驱动给出的是�
 
 内存审查至少关注：
 
-- LVGL 静态内存池 24 KB；
+- LVGL 静态内存池 64 KB；
 - LCD DMA buffer 约 9.6 KB；
 - I2S DMA descriptor/frame buffer；
-- Audio demo 96 KB 录音堆；
-- Wi-Fi 驱动或 NimBLE host/controller（两个示例不同时常驻）；
+- 手机校时期间的 Wi-Fi 驱动；
 - 各 FreeRTOS 任务栈和最大连续空闲块。
 
 新增图片、字体、网络栈、TLS、音频缓存或双缓冲时，应记录 build 后的静态 RAM/Flash 使用，并在运行时记录 free heap 与 largest free block。总 free heap 足够不代表能成功分配大连续缓冲。
@@ -254,16 +245,7 @@ SOC 准确度取决于电芯与 profile 的匹配程度。本驱动给出的是�
 4. 初始化应尽量幂等，错误应返回 `esp_err_t` 并输出包含引脚/地址的诊断日志。
 5. 明确 API 的线程、阻塞、内存所有权、任务上下文和失败返回值。
 
-新增硬件验证页：
-
-1. 创建 `main/demo_<feature>.c`，实现 `enter`、`exit`、`key`。
-2. 在 `main/demo.h` 声明，在 `main/CMakeLists.txt` 加源文件，在 `main.c` 的 `DEMOS[]` 注册。
-3. `enter` 创建并加载自己的 screen；`exit` 先停任务/定时器，再删 screen 和清空指针。
-4. 页面文字保持英文；说明性注释可用中文。
-5. 慢操作放工作任务，结果通过 LVGL 锁更新界面。
-6. 保留 OK 长按返回这一全局交互，不在页面重复实现。
-
-如果菜单项依赖新外设，还需扩展 `s_ok[]` 初始化与失败禁用逻辑。注意当前数组索引与 `DEMOS[]` 顺序隐式对应，修改顺序时必须同步核对。
+新增硬件能力时，先判断是否应进入 BSP。可复用能力按上述 BSP 流程实现；仅供一次性诊断的代码放在独立实验分支，不进入正式应用源码。产品界面由 `components/yaogui_view/` 负责，状态机、按键分发和后台任务由 `main/yaogui_app.c` 负责。慢操作必须放工作任务，并通过 LVGL 锁更新界面。
 
 ## 12. 开发环境搭建
 
@@ -405,14 +387,14 @@ idf.py flash monitor
 
 配置陈旧时可执行 `idf.py fullclean`，但这会删除生成的 build 状态；不要用它处理源码工作区问题。
 
-仓库有 `tests/test_ui_pixel_math.c` 轻量逻辑测试源，但当前根 CMake 是 ESP-IDF 工程，未提供统一的 host test 命令。因此 `idf.py build` 是最低自动检查，硬件变更必须上板。
+仓库通过 `tools/validate.sh --static` 统一运行生成物、仓库结构、C lint、摇龟逻辑、日历和固件验证脚本。`idf.py build` 仍是固件最低自动检查，硬件变更必须上板。
 
 ### 通用上板验收
 
 - USB Serial/JTAG 有稳定启动日志，无重启循环、assert、watchdog 和持续错误。
 - I2C 扫描看到预期的 0x18；装有 CW2017 的板还应看到 0x63。
-- 菜单可用 UP/DOWN 循环导航，OK 单击进入，OK 长按返回。
-- 某个可选外设故障只禁用对应页面，不影响其他功能。
+- 三枚功能键可唤醒屏幕，起卦、继续、阅读滚动、返回待机和长按重置符合应用状态机。
+- 电量计等可选外设故障不会阻止核心起卦流程。
 - 连续切换页面和反复操作后无堆持续下降、对象悬挂或任务泄漏。
 
 ### 按修改类型追加验收

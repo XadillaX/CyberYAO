@@ -22,15 +22,14 @@ The table below describes the application capabilities implemented by the curren
 | Input | `UP`, `DOWN`, and `OK` share an ADC resistor ladder on GPIO0 | `bsp_button_init()`, `bsp_button_read_mv()` | Callbacks run in the button component task and must not block; do not create a second ADC1 unit |
 | Audio | ES8311 with full-duplex PCM over I2S0, supporting playback and microphone capture | `bsp_audio_*` | PCM reads and writes block and belong in a worker task; format changes must retain the BSP close/open sequence |
 | Battery | CW2017 state-of-charge and voltage readings | `bsp_battery_*` | This capability is optional at runtime; accuracy depends on the cell and battery profile and is not equivalent to a calibrated result |
-| Wi-Fi | On-demand 2.4 GHz STA scan demo | `main/demo_wifi.c` | Scans only; it does not connect, store credentials, or validate antenna/RF performance |
-| Bluetooth LE | On-demand non-connectable NimBLE advertising as `FoloPassport` | `main/demo_ble.c` | ESP32-C3 does not support Bluetooth Classic; radio range, coexistence, and power draw require device measurements |
-| Low power | Two-second light sleep and five-second deep sleep, both with RTC timer wakeup | `main/demo_low_power.c` | Deep sleep restarts the application; the current demo exposes RTC timer wake only |
+| Wi-Fi | On-demand `CyberYAO-Time` access point for submitting local time from a phone browser | `main/yaogui_time_sync.c` | Used only for local time sync; DNS, HTTP, and the access point stop after success or timeout |
+| Standby | Dims or disables the backlight while keeping the MCU and current hexagram state alive | `main/yaogui_app.c` | Does not enter deep sleep; the power switch has no GPIO connection, so the three function keys wake the display |
 | Shared bus | ES8311 and CW2017 share I2C0 | `bsp_i2c_*` | Every device must reuse the bus owned by the BSP; do not create another bus on the same port for scanning or a new device |
 | Logging and flashing | Native ESP32-C3 USB Serial/JTAG | ESP-IDF console | GPIO18/19 are reserved for USB; the default UART0 TX on GPIO21 conflicts with the backlight |
 
 All pins, addresses, panel parameters, and button voltage windows are defined only in [`components/bsp/include/bsp_pins.h`](../components/bsp/include/bsp_pins.h). Application code must not duplicate these constants. See the [AI Hardware Development Guide](hardware-design/AI_HARDWARE_DEVELOPMENT_GUIDE.md) for the complete pin map, panel initialization, ADC thresholds, I2C addressing rules, audio clocks, and memory details.
 
-Applications may also use ESP-IDF timers, FreeRTOS tasks, and internal Flash/NVS; the Pomodoro branch contains an NVS example. Wi-Fi and Bluetooth LE remain ESP-IDF application services rather than BSP APIs: their menu pages initialize each stack only while open and release it on exit. `demo/claude-buddy-port` remains a fuller BLE application architecture reference, not a substitute for measuring the current board's antenna, RF performance, power consumption, and coexistence behavior. The current product and firmware baseline uses 8 MB Flash with a 3 MB factory-app partition plus fixed protected identity and permanent-Recovery regions so derivative firmware stays installable through the mini-program.
+Applications may also use ESP-IDF timers, FreeRTOS tasks, and internal Flash/NVS. Wi-Fi time sync is an application service rather than a BSP API and initializes networking only while synchronization is active. The current product and firmware baseline uses 8 MB Flash with a 3 MB factory-app partition plus fixed protected identity and permanent-Recovery regions so derivative firmware stays installable through the mini-program.
 
 ### Capabilities outside the current contract
 
@@ -98,7 +97,7 @@ Example branches may change the same menu, configuration, or driver in incompati
 ```text
 components/bsp/include/  Public BSP APIs and bsp_pins.h hardware facts
 components/bsp/src/      Display, button, audio, battery, and shared-I2C implementations
-main/                    Minimal menu, LVGL UI, and independent hardware demo pages
+main/                    Application startup, key state machine, time sync, and serial screenshots
 tests/                   Lightweight logic tests that can run without hardware
 tools/                   Shared local/CI validation and firmware verification scripts
 docs/                    Project docs, changelog, engineering/contribution rules, and design references

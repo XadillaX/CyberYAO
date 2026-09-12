@@ -34,16 +34,7 @@ The tracked `dependencies.lock` pins Managed Component resolution. After changin
 
 Firmware validation uses a fresh temporary build directory and an isolated `sdkconfig` generated from the tracked defaults. It does not consume or overwrite a developer's root `sdkconfig`, and it copies only the verified merged image to `build/FoloToy-AI-Passport-full.bin`. The gate also enforces the [mini-program BLE compatibility contract](ble-recovery-compatibility.md): protected partition addresses, application size, partition-table MD5, absence of protected payload data, and the Recovery bootloader hook.
 
-The baseline also has a hardware-independent logic test:
-
-```bash
-cc -std=c11 -Wall -Wextra -Werror -Imain \
-  tests/test_ui_pixel_math.c main/ui_pixel_math.c \
-  -o /tmp/test_ui_pixel_math
-/tmp/test_ui_pixel_math
-```
-
-The Yaogui logic tests can also run independently:
+The Yaogui logic tests can run independently without hardware:
 
 ```bash
 cc -std=c11 -Wall -Wextra -Werror -Icomponents/yaogui_view/include \

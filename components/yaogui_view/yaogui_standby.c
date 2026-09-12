@@ -22,7 +22,7 @@ LV_FONT_DECLARE(yaogui_standby_pixel_10)
 #define INSTRUMENT_Y 62
 #define INSTRUMENT_W 208
 #define INSTRUMENT_H 150
-
+#define BATTERY_FILL_MAX_W 15
 /* 日晷逻辑坐标，与 sundial-pixi.js 完全相同。 */
 #define SUNDIAL_W 167
 #define SUNDIAL_H 184
@@ -68,10 +68,10 @@ typedef struct {
 struct yaogui_standby {
   lv_obj_t* root;
   lv_obj_t* date;
-  lv_obj_t* battery_body;
-  lv_obj_t* battery_fill;
-  lv_obj_t* battery_terminal;
+  lv_obj_t* battery_icon;
   lv_obj_t* battery_percent;
+  int battery_fill_width;
+  uint32_t battery_color;
   lv_obj_t* time;
   lv_obj_t* period;
   lv_obj_t* sundial;
@@ -94,6 +94,15 @@ struct yaogui_standby {
   float arrow_shown_y;
   uint32_t last_ms;
   bool night;
+  bool static_state_ready;
+  bool last_time_valid;
+  bool last_worst_case;
+  int last_battery_percent;
+  int last_minute_of_day;
+  int last_year;
+  int last_month;
+  int last_day;
+  char last_date_text[48];
 };
 
 static lv_obj_t* plain_object(lv_obj_t* parent, int x, int y, int w, int h) {
@@ -167,6 +176,37 @@ static void draw_circle(lv_layer_t* layer,
       .y2 = y + radius,
   };
   lv_draw_rect(layer, &descriptor, &area);
+}
+
+static void draw_solid_rect(
+    lv_layer_t* layer, int x1, int y1, int x2, int y2, uint32_t color) {
+  lv_draw_rect_dsc_t descriptor;
+  lv_draw_rect_dsc_init(&descriptor);
+  descriptor.bg_color = lv_color_hex(color);
+  descriptor.bg_opa = LV_OPA_COVER;
+  const lv_area_t area = {.x1 = x1, .y1 = y1, .x2 = x2, .y2 = y2};
+  lv_draw_rect(layer, &descriptor, &area);
+}
+
+static void battery_draw(lv_event_t* event) {
+  yaogui_standby_t* standby = lv_event_get_user_data(event);
+  lv_layer_t* layer = lv_event_get_layer(event);
+  if (!standby || !layer) return;
+
+  lv_area_t coords;
+  lv_obj_get_coords(standby->battery_icon, &coords);
+  const int x = coords.x1;
+  const int y = coords.y1;
+  const uint32_t color = standby->battery_color;
+  if (standby->battery_fill_width > 0) {
+    draw_solid_rect(
+        layer, x + 2, y + 2, x + 1 + standby->battery_fill_width, y + 6, color);
+  }
+  draw_solid_rect(layer, x, y, x + 18, y, color);
+  draw_solid_rect(layer, x, y + 8, x + 18, y + 8, color);
+  draw_solid_rect(layer, x, y, x, y + 8, color);
+  draw_solid_rect(layer, x + 18, y, x + 18, y + 8, color);
+  draw_solid_rect(layer, x + 19, y + 3, x + 20, y + 5, color);
 }
 
 static lv_point_precise_t point_at(float x, float y, int ox, int oy) {
@@ -306,17 +346,10 @@ yaogui_standby_t* yaogui_standby_create(lv_obj_t* parent) {
   standby->date = ui_pixel_label(standby->root, "", &yaogui_font_14, 0x211812);
   lv_obj_set_pos(standby->date, 16, 13);
   lv_obj_set_size(standby->date, 155, 16);
-  standby->battery_body = plain_object(standby->root, 175, 15, 19, 9);
-  lv_obj_set_style_border_width(standby->battery_body, 1, 0);
-  lv_obj_set_style_border_color(
-      standby->battery_body, lv_color_hex(0x211812), 0);
-  standby->battery_fill = plain_object(standby->battery_body, 1, 1, 13, 5);
-  lv_obj_set_style_bg_color(standby->battery_fill, lv_color_hex(0x211812), 0);
-  lv_obj_set_style_bg_opa(standby->battery_fill, LV_OPA_COVER, 0);
-  standby->battery_terminal = plain_object(standby->root, 194, 18, 2, 3);
-  lv_obj_set_style_bg_color(
-      standby->battery_terminal, lv_color_hex(0x211812), 0);
-  lv_obj_set_style_bg_opa(standby->battery_terminal, LV_OPA_COVER, 0);
+  standby->battery_icon = plain_object(standby->root, 175, 15, 21, 9);
+  standby->battery_color = 0x211812;
+  lv_obj_add_event_cb(
+      standby->battery_icon, battery_draw, LV_EVENT_DRAW_MAIN, standby);
   standby->battery_percent =
       ui_pixel_label(standby->root, "", &yaogui_standby_pixel_10, 0x211812);
   lv_obj_set_pos(standby->battery_percent, 198, 13);
@@ -348,10 +381,8 @@ yaogui_standby_t* yaogui_standby_create(lv_obj_t* parent) {
   lv_obj_set_pos(standby->lunar, 16, 220);
   lv_obj_set_size(standby->lunar, 208, 16);
   lv_obj_set_style_text_align(standby->lunar, LV_TEXT_ALIGN_CENTER, 0);
-  standby->ganzhi = ui_pixel_label(standby->root,
-                                   "甲申月 · 癸未日 · 白露将至",
-                                   &yaogui_standby_calendar_10,
-                                   0x695A4D);
+  standby->ganzhi =
+      ui_pixel_label(standby->root, "", &yaogui_standby_calendar_10, 0x695A4D);
   lv_obj_set_pos(standby->ganzhi, 16, 237);
   lv_obj_set_size(standby->ganzhi, 208, 15);
   lv_obj_set_style_text_align(standby->ganzhi, LV_TEXT_ALIGN_CENTER, 0);
@@ -490,11 +521,8 @@ static void apply_palette(yaogui_standby_t* standby, bool night) {
   lv_obj_set_style_bg_color(
       standby->root, lv_color_hex(night ? 0x191B21 : 0xE8DCC5), 0);
   lv_obj_set_style_text_color(standby->date, lv_color_hex(foreground), 0);
-  lv_obj_set_style_border_color(
-      standby->battery_body, lv_color_hex(foreground), 0);
-  lv_obj_set_style_bg_color(standby->battery_fill, lv_color_hex(foreground), 0);
-  lv_obj_set_style_bg_color(
-      standby->battery_terminal, lv_color_hex(foreground), 0);
+  standby->battery_color = foreground;
+  lv_obj_invalidate(standby->battery_icon);
   lv_obj_set_style_text_color(
       standby->battery_percent, lv_color_hex(foreground), 0);
   lv_obj_set_style_text_color(standby->time, lv_color_hex(foreground), 0);
@@ -518,64 +546,95 @@ void yaogui_standby_render(yaogui_standby_t* standby,
   if (!standby) return;
   if (minute_of_day < 0 || minute_of_day >= 24 * 60) minute_of_day = 12 * 60;
   const bool night = minute_of_day < 6 * 60 || minute_of_day >= 18 * 60;
-  if (night != standby->night) {
+  if (!standby->static_state_ready || night != standby->night) {
     standby->night = night;
     apply_palette(standby, night);
+    set_hidden(standby->sundial, night);
+    set_hidden(standby->clepsydra, !night);
+    const int calendar_y = night ? 216 : 236;
+    lv_obj_set_y(standby->calendar_rule, calendar_y);
+    lv_obj_set_y(standby->lunar, calendar_y + 4);
+    lv_obj_set_y(standby->ganzhi, calendar_y + 20);
+    lv_obj_set_y(standby->yi_mark, calendar_y + 36);
+    lv_obj_set_y(standby->yi_text, calendar_y + 36);
+    lv_obj_set_y(standby->ji_mark, calendar_y + 47);
+    lv_obj_set_y(standby->ji_text, calendar_y + 47);
+    lv_obj_set_y(standby->footer_rule, calendar_y + 59);
+    lv_obj_set_y(standby->footer_slots, calendar_y + 67);
+    lv_obj_set_y(standby->footer, calendar_y + 68);
   }
-  set_hidden(standby->sundial, night);
-  set_hidden(standby->clepsydra, !night);
-  const int calendar_y = night ? 216 : 236;
-  lv_obj_set_y(standby->calendar_rule, calendar_y);
-  lv_obj_set_y(standby->lunar, calendar_y + 4);
-  lv_obj_set_y(standby->ganzhi, calendar_y + 20);
-  lv_obj_set_y(standby->yi_mark, calendar_y + 36);
-  lv_obj_set_y(standby->yi_text, calendar_y + 36);
-  lv_obj_set_y(standby->ji_mark, calendar_y + 47);
-  lv_obj_set_y(standby->ji_text, calendar_y + 47);
-  lv_obj_set_y(standby->footer_rule, calendar_y + 59);
-  lv_obj_set_y(standby->footer_slots, calendar_y + 67);
-  lv_obj_set_y(standby->footer, calendar_y + 68);
 
-  lv_label_set_text(
-      standby->date,
-      time_valid && date_text && date_text[0] ? date_text : "等待校时");
-  set_hidden(standby->battery_body, battery_percent < 0);
-  set_hidden(standby->battery_terminal, battery_percent < 0);
-  set_hidden(standby->battery_percent, battery_percent < 0);
-  if (battery_percent >= 0) {
-    int battery = battery_percent > 100 ? 100 : battery_percent;
-    lv_obj_set_width(standby->battery_fill, battery * 16 / 100);
+  const char* shown_date =
+      time_valid && date_text && date_text[0] ? date_text : "等待校时";
+  if (!standby->static_state_ready ||
+      strcmp(standby->last_date_text, shown_date) != 0) {
+    lv_label_set_text(standby->date, shown_date);
+    snprintf(standby->last_date_text,
+             sizeof(standby->last_date_text),
+             "%s",
+             shown_date);
+  }
+  const int battery = battery_percent < 0
+                          ? -1
+                          : (battery_percent > 100 ? 100 : battery_percent);
+  if (!standby->static_state_ready ||
+      battery != standby->last_battery_percent) {
+    set_hidden(standby->battery_icon, battery < 0);
+    set_hidden(standby->battery_percent, battery < 0);
+  }
+  if (battery >= 0 && (!standby->static_state_ready ||
+                       battery != standby->last_battery_percent)) {
+    standby->battery_fill_width = (battery * BATTERY_FILL_MAX_W + 50) / 100;
+    lv_obj_invalidate(standby->battery_icon);
     lv_label_set_text_fmt(standby->battery_percent, "%d%%", battery);
   }
-  if (time_valid) {
-    lv_label_set_text_fmt(
-        standby->time, "%02d:%02d", minute_of_day / 60, minute_of_day % 60);
-    set_compact_text(standby->period, period_text(minute_of_day, night));
-  } else {
-    lv_label_set_text(standby->time, "--:--");
-    lv_label_set_text(standby->period, "等待手机校时");
+  if (!standby->static_state_ready || time_valid != standby->last_time_valid ||
+      minute_of_day != standby->last_minute_of_day) {
+    if (time_valid) {
+      lv_label_set_text_fmt(
+          standby->time, "%02d:%02d", minute_of_day / 60, minute_of_day % 60);
+      set_compact_text(standby->period, period_text(minute_of_day, night));
+    } else {
+      lv_label_set_text(standby->time, "--:--");
+      lv_label_set_text(standby->period, "等待手机校时");
+    }
   }
 
-  yaogui_calendar_day_t calendar;
-  set_hidden(standby->yi_mark, !time_valid);
-  set_hidden(standby->ji_mark, !time_valid);
-  if (worst_case) {
-    lv_label_set_text(standby->lunar, "农历癸亥年闰十二月三十");
-    lv_label_set_text(standby->ganzhi, "癸亥月  癸亥日  冬至");
-    set_compact_text(standby->yi_text, "修饰垣墙 · 平治道涂");
-    set_compact_text(standby->ji_text, "会亲友 · 进人口");
-  } else if (time_valid &&
-             yaogui_calendar_lookup(year, month, day, &calendar)) {
-    lv_label_set_text(standby->lunar, calendar.lunar);
-    lv_label_set_text(standby->ganzhi, calendar.ganzhi);
-    set_compact_text(standby->yi_text, calendar.yi);
-    set_compact_text(standby->ji_text, calendar.ji);
-  } else {
-    lv_label_set_text(standby->lunar, "农历等待校时");
-    lv_label_set_text(standby->ganzhi, "");
-    lv_label_set_text(standby->yi_text, "");
-    lv_label_set_text(standby->ji_text, "");
+  const bool calendar_changed =
+      !standby->static_state_ready || time_valid != standby->last_time_valid ||
+      worst_case != standby->last_worst_case || year != standby->last_year ||
+      month != standby->last_month || day != standby->last_day;
+  if (calendar_changed) {
+    yaogui_calendar_day_t calendar;
+    set_hidden(standby->yi_mark, !time_valid);
+    set_hidden(standby->ji_mark, !time_valid);
+    if (worst_case) {
+      lv_label_set_text(standby->lunar, "农历癸亥年闰十二月三十");
+      lv_label_set_text(standby->ganzhi, "癸亥月  癸亥日  冬至");
+      set_compact_text(standby->yi_text, "修饰垣墙 · 平治道涂");
+      set_compact_text(standby->ji_text, "会亲友 · 进人口");
+    } else if (time_valid &&
+               yaogui_calendar_lookup(year, month, day, &calendar)) {
+      lv_label_set_text(standby->lunar, calendar.lunar);
+      lv_label_set_text(standby->ganzhi, calendar.ganzhi);
+      set_compact_text(standby->yi_text, calendar.yi);
+      set_compact_text(standby->ji_text, calendar.ji);
+    } else {
+      lv_label_set_text(standby->lunar, "农历等待校时");
+      lv_label_set_text(standby->ganzhi, "");
+      lv_label_set_text(standby->yi_text, "");
+      lv_label_set_text(standby->ji_text, "");
+    }
   }
+
+  standby->static_state_ready = true;
+  standby->last_time_valid = time_valid;
+  standby->last_worst_case = worst_case;
+  standby->last_battery_percent = battery;
+  standby->last_minute_of_day = minute_of_day;
+  standby->last_year = year;
+  standby->last_month = month;
+  standby->last_day = day;
 
   float delta_frames = 1.0f;
   if (standby->last_ms != 0U) {

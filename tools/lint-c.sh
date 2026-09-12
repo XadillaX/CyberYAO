@@ -31,6 +31,9 @@ for (const [name, version] of Object.entries(expected)) {
 
 sources=()
 while IFS= read -r -d '' file; do
+    if [[ ! -f "${file}" ]]; then
+        continue
+    fi
     case "${file}" in
         managed_components/*|generated/*|build/*|*/yaogui_text_data.c)
             continue

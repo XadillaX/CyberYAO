@@ -19,7 +19,7 @@ docs/
   assets/                     fork 补充文档素材目录（README 不足以说明项目时存放补充文档与素材；上游 main 只保留空目录 `.gitkeep`，内容文件仅存在于 fork）
   fork-guide.md               本文档：fork 工作流与约定
 components/bsp/               板级支持包：显示、按键、音频、电池、I2C（稳定 API 与 bsp_pins.h 硬件事实）
-main/                         设备固件应用：LVGL 菜单 + 独立 demo_*.c 硬件验证页（新 demo 需实现 demo.h 声明的 enter/exit/key 接口）
+main/                         设备固件应用：启动、按键状态机、校时与串口截屏
 assets/                       预置资源：fonts/ images/ music/（各含 README.md）
 skills/                       可复用技能目录（每个 skill 独立子目录）
 tests/                        轻量级逻辑测试（无硬件可运行）

@@ -73,8 +73,8 @@ LCD reset and amplifier enable are `-1`: display reset uses software reset, and 
 | I2S0 | audio BSP | TX and RX are full duplex and share MCLK/BCLK/WS. |
 | USB Serial/JTAG | console configuration | GPIO18/19 are part of the selected console path. |
 | Internal RAM/DMA | display, LVGL, audio, radio, tasks | No PSRAM exists; total free heap and largest contiguous block both matter. |
-| NVS/network event loop | `demo_radio.c` | Prepared once for Wi-Fi/BLE demos; do not erase unrelated NVS data on initialization errors. |
-| Wi-Fi/BLE stacks | individual demo pages | Current demos start on page entry and deinitialize on exit; the stacks do not remain active together. |
+| NVS/network event loop | `yaogui_time_sync.c` | Prepared only for phone-assisted time sync; do not erase unrelated NVS data on initialization errors. |
+| Wi-Fi stack | phone-assisted time sync | Starts while synchronization is active and stops after success, cancellation, or timeout. |
 
 GPIO0 is both the button ADC node and an ESP32-C3 boot-related pin. GPIO21 is the backlight output and conflicts with the commonly used UART0 TX mapping. Pin reassignment requires boot/programming-path review and on-device acceptance.
 
@@ -91,15 +91,16 @@ GPIO0 is both the button ADC node and an ESP32-C3 boot-related pin. GPIO21 is th
 app_main
   ├─ shared I2C init and scan
   ├─ display and LVGL init, then backlight
-  ├─ button init
-  ├─ audio init
   ├─ battery init
-  └─ LVGL menu and independent demo pages
+  ├─ Yaogui application
+  ├─ serial screenshot service
+  ├─ phone-assisted time sync
+  └─ button event dispatch
 ```
 
-Display/LVGL is a hard dependency. Buttons, audio, and battery are soft dependencies whose pages show `[FAIL]` while other pages remain available. Public BSP APIs are under `components/bsp/include/`; most initialization is idempotent, but there is no universal BSP deinitialization API.
+Display/LVGL is a hard dependency. Battery is optional and is hidden when initialization fails; button initialization failures are logged. Public BSP APIs are under `components/bsp/include/`; most initialization is idempotent, but there is no universal BSP deinitialization API.
 
-Wi-Fi, NimBLE, and sleep use ESP-IDF directly rather than the BSP. `demo_radio.c` owns shared NVS, `esp_netif`, and default-event-loop setup. Wi-Fi and Bluetooth pages allocate their radio stacks on entry and stop/deinitialize them on exit. Do not erase NVS to hide partition errors. Deep sleep restarts the application and the demo uses RTC slow memory for the wake counter.
+Wi-Fi time sync uses ESP-IDF directly rather than the BSP. `yaogui_time_sync.c` owns NVS, `esp_netif`, the default event loop, DNS, and HTTP services, then releases network resources after success, cancellation, or timeout. Standby currently disables the backlight without entering light or deep sleep so the hexagram and animation state remain available.
 
 ## 5. Display and LVGL
 
@@ -109,7 +110,7 @@ Wi-Fi, NimBLE, and sleep use ESP-IDF directly rather than the BSP. `demo_radio.c
 - The vendor porch, power, and gamma sequence in `bsp_display.c` is panel-specific. Do not treat it as a universal ST7789 sequence.
 - `swap_bytes=true` is required because LVGL emits little-endian RGB565 while SPI sends the high byte first.
 
-The LVGL DMA buffer is one `240 × 20` RGB565 buffer, about 9.6 KB; the LVGL internal pool is 24 KB. Do not add large/double buffers without checking internal RAM, the largest contiguous heap block, and I2S DMA.
+The LVGL DMA buffer is one `240 × 20` RGB565 buffer, about 9.6 KB; the LVGL internal pool is 64 KB. Do not add large/double buffers without checking internal RAM, the largest contiguous heap block, and I2S DMA.
 
 LVGL is not thread-safe. Timer callbacks in LVGL context may access objects directly. Button callbacks and worker tasks must use `bsp_lvgl_lock()`/`bsp_lvgl_unlock()`. Stop producers before deleting a page and clear static object pointers afterward.
 
@@ -152,7 +153,7 @@ The MCU is I2S master and the ES8311 is slave. I2S0 TX/RX shares MCLK GPIO6, BCL
 - `bsp_audio_read/write` block and must not run in button callbacks or the LVGL task.
 - I2S DMA uses six descriptors of 240 frames each.
 
-The audio demo's three-second recording buffer is about 96 KB and is the largest transient heap allocation. Prefer chunked streaming for longer audio. Production task shutdown needs a cancellable loop and explicit exit handshake rather than deleting a task blocked in codec I/O.
+The application streams embedded PCM in a worker task rather than allocating a full recording buffer. New recording or long-form playback features should use chunked streaming and a cancellable task-exit handshake.
 
 ## 9. CW2017 fuel gauge
 
@@ -175,15 +176,13 @@ payload. See the [BLE compatibility contract](../development/engineering/ble-rec
 
 The console is USB Serial/JTAG. Do not switch to the UART0 default output without resolving its GPIO21 conflict with the backlight.
 
-Review at least the 24 KB LVGL pool, 9.6 KB LCD DMA buffer, I2S DMA, 96 KB demo recording, radio stacks, task stacks, total free heap, and largest contiguous block when adding assets, TLS/networking, audio buffers, or double buffering.
+Review at least the 64 KB LVGL pool, 9.6 KB LCD DMA buffer, I2S DMA, time-sync Wi-Fi stack, task stacks, total free heap, and largest contiguous block when adding assets, TLS/networking, audio buffers, or double buffering.
 
 ## 11. Adding features
 
 For reusable hardware capability, add `bsp_<feature>.h` and its implementation, keep constants in `bsp_pins.h`, update component CMake/dependencies, return `esp_err_t`, log actionable pin/address context, and document threading, blocking, ownership, initialization, and failure behavior.
 
-For a validation page, implement `enter`, `exit`, and `key` in `main/demo_<feature>.c`; declare it in `demo.h`, list it in CMake, and register it in `DEMOS[]`. Create/load a page-owned screen on entry. Stop workers/timers before deleting it on exit. Keep UI text in English, put slow work in worker tasks, lock LVGL updates, and preserve global OK-long-press return behavior.
-
-Menu initialization status arrays implicitly follow `DEMOS[]` order; update and review them together.
+Before adding hardware code, decide whether it belongs in the BSP. Implement reusable capabilities through the BSP workflow above; keep one-off diagnostics on a separate experiment branch rather than in production application sources. Product UI belongs under `components/yaogui_view/`, while state machines, key dispatch, and worker tasks belong in `main/yaogui_app.c`. Put slow work in worker tasks and lock LVGL updates.
 
 ## 12. Development environment
 

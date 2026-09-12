@@ -41,15 +41,6 @@ idf.py flash monitor          # Optional incremental application flash
 idf.py fullclean              # Clear stale build state (never for user source changes)
 ```
 
-The current baseline includes a pure-logic test that runs without hardware:
-
-```bash
-cc -std=c11 -Wall -Wextra -Werror -Imain \
-  tests/test_ui_pixel_math.c main/ui_pixel_math.c \
-  -o /tmp/test_ui_pixel_math
-/tmp/test_ui_pixel_math
-```
-
 The repository provides one validation entry point for local development and CI:
 
 ```bash

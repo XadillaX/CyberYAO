@@ -29,16 +29,17 @@ run_static_checks() {
     "${actionlint_bin}" -color .github/workflows/*.yml
 
     test_dir="$(mktemp -d /tmp/ai-passport-host-tests.XXXXXX)"
-    "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain \
-        tests/test_ui_pixel_math.c main/ui_pixel_math.c \
-        -o "${test_dir}/test_ui_pixel_math"
-    "${test_dir}/test_ui_pixel_math"
     "${CC:-cc}" -std=c11 -Wall -Wextra -Werror \
         -Icomponents/yaogui_view/include \
         tests/test_yaogui_logic.c components/yaogui_view/yaogui_logic.c \
         components/yaogui_view/yaogui_text_data.c \
         -o "${test_dir}/test_yaogui_logic"
     "${test_dir}/test_yaogui_logic"
+    "${CC:-cc}" -std=c11 -Wall -Wextra -Werror \
+        -Icomponents/yaogui_view/include \
+        tests/test_yaogui_calendar.c generated/yaogui_calendar_data.c \
+        -o "${test_dir}/test_yaogui_calendar"
+    "${test_dir}/test_yaogui_calendar"
     python3 tests/test_verify_firmware.py
     rm -rf "${test_dir}"
     echo "Host tests: PASS"

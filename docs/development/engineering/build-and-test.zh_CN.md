@@ -31,16 +31,7 @@ target 或已跟踪 defaults 时，先保留有意的本地设置，再运行
 
 固件门禁使用全新的临时构建目录，并从仓库 `sdkconfig.defaults` 生成隔离的 `sdkconfig`。它不会读取或覆盖开发者根目录的 `sdkconfig`，只把验证通过的合并镜像复制到 `build/FoloToy-AI-Passport-full.bin`。门禁同时强制检查[小程序 BLE 兼容契约](ble-recovery-compatibility.zh_CN.md)：保护分区地址、应用大小、分区表 MD5、保护区数据不入包，以及 Recovery bootloader hook。
 
-当前基线含一个可独立运行的纯逻辑测试：
-
-```bash
-cc -std=c11 -Wall -Wextra -Werror -Imain \
-  tests/test_ui_pixel_math.c main/ui_pixel_math.c \
-  -o /tmp/test_ui_pixel_math
-/tmp/test_ui_pixel_math
-```
-
-摇龟逻辑测试可独立运行：
+摇龟逻辑测试可脱离硬件独立运行：
 
 ```bash
 cc -std=c11 -Wall -Wextra -Werror -Icomponents/yaogui_view/include \

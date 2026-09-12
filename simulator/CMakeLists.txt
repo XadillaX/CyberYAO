@@ -9,6 +9,8 @@ set(ROOT_DIR "${CMAKE_CURRENT_LIST_DIR}/..")
 set(LVGL_DIR "${ROOT_DIR}/managed_components/lvgl__lvgl")
 set(VIEW_DIR "${ROOT_DIR}/components/yaogui_view")
 set(GENERATED_DIR "${ROOT_DIR}/generated")
+include("${ROOT_DIR}/cmake/yaogui_generated_sources.cmake")
+yaogui_collect_generated_sources(YAOGUI_GENERATED_SRCS "${GENERATED_DIR}")
 
 if(NOT EXISTS "${LVGL_DIR}/lvgl.h")
     message(FATAL_ERROR "缺少 managed_components/lvgl__lvgl，请先执行一次固件依赖解析")
@@ -33,20 +35,7 @@ add_executable(yaogui_simulator
     "${VIEW_DIR}/ui_pixel.c"
     "${VIEW_DIR}/yaogui_logic.c"
     "${VIEW_DIR}/yaogui_text_data.c"
-    "${GENERATED_DIR}/yaogui_font_14.c"
-    "${GENERATED_DIR}/yaogui_classic_14.c"
-    "${GENERATED_DIR}/yaogui_mifu_18.c"
-    "${GENERATED_DIR}/yaogui_clock_28.c"
-    "${GENERATED_DIR}/yaogui_standby_display_12.c"
-    "${GENERATED_DIR}/yaogui_standby_calendar_10.c"
-    "${GENERATED_DIR}/yaogui_standby_pixel_10.c"
-    "${GENERATED_DIR}/yaogui_coin_sound.c"
-    "${GENERATED_DIR}/yaogui_ambient_sound.c"
-    "${GENERATED_DIR}/yaogui_shell_images.c"
-    "${GENERATED_DIR}/yaogui_coin_images.c"
-    "${GENERATED_DIR}/yaogui_table_image.c"
-    "${GENERATED_DIR}/yaogui_standby_images.c"
-    "${GENERATED_DIR}/yaogui_calendar_data.c"
+    ${YAOGUI_GENERATED_SRCS}
     "${VIEW_DIR}/yaogui_standby.c"
     "${VIEW_DIR}/yaogui_view.c"
 )

@@ -1,20 +1,6 @@
 set(YAOGUI_GENERATED_DIR "${CMAKE_CURRENT_LIST_DIR}/../../generated")
-set(YAOGUI_GENERATED_SRCS
-    "${YAOGUI_GENERATED_DIR}/yaogui_font_14.c"
-    "${YAOGUI_GENERATED_DIR}/yaogui_classic_14.c"
-    "${YAOGUI_GENERATED_DIR}/yaogui_mifu_18.c"
-    "${YAOGUI_GENERATED_DIR}/yaogui_clock_28.c"
-    "${YAOGUI_GENERATED_DIR}/yaogui_standby_display_12.c"
-    "${YAOGUI_GENERATED_DIR}/yaogui_standby_calendar_10.c"
-    "${YAOGUI_GENERATED_DIR}/yaogui_standby_pixel_10.c"
-    "${YAOGUI_GENERATED_DIR}/yaogui_coin_sound.c"
-    "${YAOGUI_GENERATED_DIR}/yaogui_ambient_sound.c"
-    "${YAOGUI_GENERATED_DIR}/yaogui_shell_images.c"
-    "${YAOGUI_GENERATED_DIR}/yaogui_coin_images.c"
-    "${YAOGUI_GENERATED_DIR}/yaogui_table_image.c"
-    "${YAOGUI_GENERATED_DIR}/yaogui_standby_images.c"
-    "${YAOGUI_GENERATED_DIR}/yaogui_calendar_data.c"
-)
+include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/yaogui_generated_sources.cmake")
+yaogui_collect_generated_sources(YAOGUI_GENERATED_SRCS "${YAOGUI_GENERATED_DIR}")
 
 foreach(generated_source IN LISTS YAOGUI_GENERATED_SRCS)
     if(NOT EXISTS "${generated_source}")

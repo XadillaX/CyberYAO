@@ -37,7 +37,7 @@ requirement
               └─ bsp_pins.h       pin and hardware-parameter source of truth
 ```
 
-A new page implements the `enter`, `exit`, and `key` interface in `main/demo_<feature>.c`, is declared in `main/demo.h`, added to `main/CMakeLists.txt`, and registered in `main.c`. Extend menu initialization and failure degradation for new optional peripherals.
+Add or modify LVGL objects and rendering under `components/yaogui_view/`; keep state machines, key dispatch, and worker tasks in `main/yaogui_app.c`. Register new compilation units in the matching `CMakeLists.txt`, and preserve failure degradation for optional peripherals.
 
 Only reusable hardware capabilities belong in the BSP. Document blocking behavior, task context, ownership, failures, and initialization order. Pins and I2C addresses belong only in `bsp_pins.h`.
 

@@ -1,6 +1,5 @@
 idf_component_register(
     SRCS "main.c"
-         "ui_pixel_math.c"
          "yaogui_app.c"
          "yaogui_time_sync.c"
          "fap_screenshot.c"

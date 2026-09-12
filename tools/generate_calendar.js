@@ -6,6 +6,7 @@ const { Solar } = require("lunar-javascript");
 
 const output = process.argv[2];
 if (!output) throw new Error("缺少输出文件路径");
+const charsetOutput = process.argv[3];
 
 const START_YEAR = 2024;
 const END_YEAR = 2040;
@@ -86,6 +87,16 @@ const yiPool = pool();
 const jiPool = pool();
 const termPool = pool();
 const records = [];
+const standbyCalendarCharacters = new Set();
+
+function formatTerm(term, days) {
+  const digits = "零一二三四五六七八九";
+  if (days === 0) return term;
+  if (days < 10) return `${term}前${digits[days]}日`;
+  if (days === 10) return `${term}前十日`;
+  if (days < 20) return `${term}前十${digits[days % 10]}日`;
+  return `${term}前二十${days % 10 ? digits[days % 10] : ""}日`;
+}
 
 for (let year = START_YEAR; year <= END_YEAR; year++) {
   for (let month = 1; month <= 12; month++) {
@@ -93,8 +104,22 @@ for (let year = START_YEAR; year <= END_YEAR; year++) {
     for (let day = 1; day <= days; day++) {
       const lunar = Solar.fromYmd(year, month, day).getLunar();
       const lunarMonth = lunar.getMonth();
-      const previousTerm = lunar.getPrevJieQi();
-      const term = previousTerm ? previousTerm.getName() : "";
+      const currentTerm = lunar.getJieQi();
+      const nextTerm = lunar.getNextJieQi();
+      const term = currentTerm || (nextTerm ? nextTerm.getName() : "");
+      let termDays = 0;
+      if (!currentTerm && nextTerm) {
+        const solar = nextTerm.getSolar();
+        termDays = Math.round(
+          (Date.UTC(solar.getYear(), solar.getMonth() - 1, solar.getDay()) -
+            Date.UTC(year, month - 1, day)) /
+            86400000,
+        );
+      }
+      const ganzhiText =
+        `${lunar.getMonthInGanZhi()}月  ${lunar.getDayInGanZhi()}日  ` +
+        formatTerm(term, termDays);
+      for (const character of ganzhiText) standbyCalendarCharacters.add(character);
       records.push([
         GAN_ZHI.indexOf(lunar.getYearInGanZhi()),
         Math.abs(lunarMonth),
@@ -103,6 +128,7 @@ for (let year = START_YEAR; year <= END_YEAR; year++) {
         GAN_ZHI.indexOf(lunar.getMonthInGanZhi()),
         GAN_ZHI.indexOf(lunar.getDayInGanZhi()),
         termPool.id(term),
+        termDays,
         yiPool.id(lunar.getDayYi().slice(0, 2).join(" · ")),
         jiPool.id(lunar.getDayJi().slice(0, 2).join(" · ")),
       ]);
@@ -132,6 +158,7 @@ source +=
   "  uint8_t month_gz;\n" +
   "  uint8_t day_gz;\n" +
   "  uint8_t term;\n" +
+  "  uint8_t term_days;\n" +
   "  uint16_t yi;\n" +
   "  uint16_t ji;\n" +
   "} calendar_record_t;\n\n";
@@ -146,7 +173,7 @@ source += records
   .map(
     (record) =>
       `    {${record[0]}, ${record[1]}, ${record[2]}, ${record[3]}, ` +
-      `${record[4]}, ${record[5]}, ${record[6]}, ${record[7]}, ${record[8]}},`,
+      `${record[4]}, ${record[5]}, ${record[6]}, ${record[7]}, ${record[8]}, ${record[9]}},`,
   )
   .join("\n");
 source += "\n};\n\n";
@@ -167,6 +194,26 @@ source +=
   "  if (month > 2 && leap_year(year)) index++;\n" +
   "  return index;\n" +
   "}\n\n" +
+  "static void format_term(const calendar_record_t* record, char* output,\n" +
+  "                        size_t output_size) {\n" +
+  "  static const char* const digits[] = {\n" +
+  '      "零", "一", "二", "三", "四", "五", "六", "七", "八", "九",\n' +
+  "  };\n" +
+  "  if (record->term_days == 0) {\n" +
+  '    snprintf(output, output_size, "%s", SOLAR_TERMS[record->term]);\n' +
+  "  } else if (record->term_days < 10) {\n" +
+  '    snprintf(output, output_size, "%s前%s日", SOLAR_TERMS[record->term],\n' +
+  "             digits[record->term_days]);\n" +
+  "  } else if (record->term_days == 10) {\n" +
+  '    snprintf(output, output_size, "%s前十日", SOLAR_TERMS[record->term]);\n' +
+  "  } else if (record->term_days < 20) {\n" +
+  '    snprintf(output, output_size, "%s前十%s日", SOLAR_TERMS[record->term],\n' +
+  "             digits[record->term_days % 10]);\n" +
+  "  } else {\n" +
+  '    snprintf(output, output_size, "%s前二十%s日", SOLAR_TERMS[record->term],\n' +
+  "             record->term_days % 10 ? digits[record->term_days % 10] : \"\");\n" +
+  "  }\n" +
+  "}\n\n" +
   "bool yaogui_calendar_lookup(int year, int month, int day,\n" +
   "                            yaogui_calendar_day_t* result) {\n" +
   "  if (!result) return false;\n" +
@@ -174,15 +221,20 @@ source +=
   "  if (index < 0 || (size_t)index >= sizeof(RECORDS) / sizeof(RECORDS[0]))\n" +
   "    return false;\n" +
   "  const calendar_record_t* record = &RECORDS[index];\n" +
+  "  char term[32];\n" +
+  "  format_term(record, term, sizeof(term));\n" +
   "  snprintf(result->lunar, sizeof(result->lunar), \"农历%s年%s%s%s\",\n" +
   "           GAN_ZHI[record->lunar_year_gz], record->leap_month ? \"闰\" : \"\",\n" +
   "           LUNAR_MONTHS[record->lunar_month], LUNAR_DAYS[record->lunar_day]);\n" +
   "  snprintf(result->ganzhi, sizeof(result->ganzhi), \"%s月  %s日  %s\",\n" +
   "           GAN_ZHI[record->month_gz], GAN_ZHI[record->day_gz],\n" +
-  "           SOLAR_TERMS[record->term]);\n" +
+  "           term);\n" +
   "  result->yi = DAY_YI[record->yi];\n" +
   "  result->ji = DAY_JI[record->ji];\n" +
   "  return true;\n" +
   "}\n";
 
 fs.writeFileSync(output, source);
+if (charsetOutput) {
+  fs.writeFileSync(charsetOutput, [...standbyCalendarCharacters].sort().join(""));
+}

@@ -85,28 +85,44 @@ static bool standby_clock(char* date_text,
       "星期五",
       "星期六",
   };
+  static time_t cached_current = (time_t)-1;
+  static char cached_date[48];
+  static int cached_minute_of_day;
+  static int cached_year;
+  static int cached_month;
+  static int cached_day;
+  static bool cached_valid;
   const time_t current = time(NULL);
-  struct tm local;
-  if (current >= 1700000000 && localtime_r(&current, &local)) {
-    snprintf(date_text,
-             date_text_size,
-             "%d年%d月%d日 · %s",
-             local.tm_year + 1900,
-             local.tm_mon + 1,
-             local.tm_mday,
-             weekdays[local.tm_wday]);
-    *minute_of_day = local.tm_hour * 60 + local.tm_min;
-    *year = local.tm_year + 1900;
-    *month = local.tm_mon + 1;
-    *day = local.tm_mday;
-    return true;
+  if (current != cached_current) {
+    struct tm local;
+    cached_current = current;
+    cached_valid = current >= 1700000000 && localtime_r(&current, &local);
+    if (cached_valid) {
+      snprintf(cached_date,
+               sizeof(cached_date),
+               "%d年%d月%d日 · %s",
+               local.tm_year + 1900,
+               local.tm_mon + 1,
+               local.tm_mday,
+               weekdays[local.tm_wday]);
+      cached_minute_of_day = local.tm_hour * 60 + local.tm_min;
+      cached_year = local.tm_year + 1900;
+      cached_month = local.tm_mon + 1;
+      cached_day = local.tm_mday;
+    } else {
+      snprintf(cached_date, sizeof(cached_date), "等待校时");
+      cached_minute_of_day = -1;
+      cached_year = 0;
+      cached_month = 0;
+      cached_day = 0;
+    }
   }
-  snprintf(date_text, date_text_size, "等待校时");
-  *minute_of_day = -1;
-  *year = 0;
-  *month = 0;
-  *day = 0;
-  return false;
+  snprintf(date_text, date_text_size, "%s", cached_date);
+  *minute_of_day = cached_minute_of_day;
+  *year = cached_year;
+  *month = cached_month;
+  *day = cached_day;
+  return cached_valid;
 }
 
 static uint32_t now_ms(void) {
