@@ -184,6 +184,8 @@ int main(int argc, char** argv) {
   bool snapshot_waiting = false;
   bool snapshot_time_sync = false;
   bool snapshot_battery_full = false;
+  yaogui_reading_share_status_t snapshot_reading_share =
+      YAOGUI_READING_SHARE_HIDDEN;
   int snapshot_minute = 12 * 60 + 28;
   if (force_standby && standby_minute_arg) {
     snapshot_minute = atoi(standby_minute_arg);
@@ -220,6 +222,14 @@ int main(int argc, char** argv) {
       snapshot_minute = 12 * 60;
       snapshot_battery_full = true;
     }
+  } else if (snapshot_mode &&
+             strcmp(snapshot_mode, "reading-share-waiting") == 0) {
+    snapshot_reading_share = YAOGUI_READING_SHARE_WAITING;
+  } else if (snapshot_mode &&
+             strcmp(snapshot_mode, "reading-share-unavailable") == 0) {
+    snapshot_reading_share = YAOGUI_READING_SHARE_UNAVAILABLE;
+  } else if (snapshot_mode && strcmp(snapshot_mode, "reading-share-qr") == 0) {
+    snapshot_reading_share = YAOGUI_READING_SHARE_QR;
   }
   const bool interactive_audio = !smoke_test && !snapshot_path;
   uint32_t snapshot_now_ms = UINT32_MAX;
@@ -391,6 +401,10 @@ int main(int argc, char** argv) {
         .standby_worst_case = snapshot_worst_case,
         .time_sync_indicator = snapshot_time_sync ? YAOGUI_TIME_SYNC_WAITING
                                                   : YAOGUI_TIME_SYNC_IDLE,
+        .reading_share_status = snapshot_reading_share,
+        .reading_share_url = snapshot_reading_share == YAOGUI_READING_SHARE_QR
+                                 ? "http://192.168.0.109/guaxiang.html"
+                                 : NULL,
     };
     yaogui_view_render(view, &state);
     lv_timer_handler();

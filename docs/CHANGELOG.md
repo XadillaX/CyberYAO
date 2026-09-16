@@ -4,7 +4,10 @@
 
 # Changelog
 
-## Unreleased
+## v1.2.0 - 2026-09-16
+
+- Replaced the phone time-sync page with the CyberYAO wood-grain Wi-Fi portal. Its hotspot name has a stable suffix derived from the device MAC (for example, `CyberYAO-A1B2C3`); the gateway and DNS use `66.66.66.66`, while `cyberyao` resolves to the captive portal. The page scans nearby networks and stores, restores, and updates passwords per SSID in same-origin `localStorage`. Credentials persist on the device only after DHCP succeeds, followed by NTP synchronization. Three consecutive Wi-Fi failures or five minutes without Internet reopen the portal and the on-device network prompt.
+- Added phone-assisted interpretation. Double-click Confirm on the detailed reading screen to show a local-network QR code. The phone page captures the querent, question, focus, and reading depth, then builds a structured prompt for TraeWork. Its advanced mode can request the Liuyao Skill, and the final output is an HTML divination report optimized for phones. The standby screen now also shows Wi-Fi status.
 
 ## v1.1.1 - 2026-09-12
 

@@ -27,7 +27,6 @@ static const char* TAG = "yaogui";
 #define APP_IDLE_DIM_MS 30000U
 #define APP_STANDBY_OFF_MS 30000U
 #define BATTERY_REFRESH_MS 30000U
-#define TIME_SYNC_TIMEOUT_MS 120000U
 #define TIME_SYNC_RESULT_MS 2000U
 
 typedef struct {
@@ -69,6 +68,11 @@ static yaogui_time_sync_indicator_t s_time_sync_indicator;
 static uint32_t s_time_sync_started_ms;
 static uint32_t s_time_sync_generation;
 static uint32_t s_time_sync_error_generation;
+static uint32_t s_time_sync_portal_generation;
+static int64_t s_cast_started_at;
+static yaogui_reading_share_status_t s_reading_share_status;
+static uint32_t s_reading_share_started_ms;
+static char s_reading_share_url[80];
 
 static bool standby_clock(char* date_text,
                           size_t date_text_size,
@@ -77,13 +81,13 @@ static bool standby_clock(char* date_text,
                           int* month,
                           int* day) {
   static const char* const weekdays[] = {
-      "星期日",
-      "星期一",
-      "星期二",
-      "星期三",
-      "星期四",
-      "星期五",
-      "星期六",
+      "周日",
+      "周一",
+      "周二",
+      "周三",
+      "周四",
+      "周五",
+      "周六",
   };
   static time_t cached_current = (time_t)-1;
   static char cached_date[48];
@@ -100,7 +104,7 @@ static bool standby_clock(char* date_text,
     if (cached_valid) {
       snprintf(cached_date,
                sizeof(cached_date),
-               "%d年%d月%d日 · %s",
+               "%d年%d月%d日 %s",
                local.tm_year + 1900,
                local.tm_mon + 1,
                local.tm_mday,
@@ -129,6 +133,13 @@ static uint32_t now_ms(void) {
   return (uint32_t)(esp_timer_get_time() / 1000);
 }
 
+static yaogui_wifi_status_t wifi_status(void) {
+  if (yaogui_time_sync_internet_ready()) return YAOGUI_WIFI_ONLINE;
+  if (yaogui_time_sync_has_ip()) return YAOGUI_WIFI_LOCAL;
+  if (yaogui_time_sync_connecting()) return YAOGUI_WIFI_CONNECTING;
+  return YAOGUI_WIFI_DISCONNECTED;
+}
+
 static void request_time_sync(void) {
   if (yaogui_time_sync_request() != ESP_OK) {
     s_time_sync_indicator = YAOGUI_TIME_SYNC_TIMEOUT;
@@ -138,9 +149,10 @@ static void request_time_sync(void) {
   }
   s_time_sync_generation = yaogui_time_sync_generation();
   s_time_sync_error_generation = yaogui_time_sync_error_generation();
+  s_time_sync_portal_generation = yaogui_time_sync_portal_generation();
   s_time_sync_started_ms = now_ms();
   s_time_sync_indicator = YAOGUI_TIME_SYNC_WAITING;
-  ESP_LOGI(TAG, "等待手机通过 Wi-Fi 页面提交本地时间");
+  ESP_LOGI(TAG, "Waiting for Wi-Fi credentials from the phone portal");
 }
 
 static esp_err_t teardown_step(esp_err_t first_error,
@@ -314,6 +326,32 @@ static void process_key(const key_event_t* key) {
     }
     return;
   }
+  if (s_reading_share_status != YAOGUI_READING_SHARE_HIDDEN) {
+    if (key->button == BSP_BTN_OK && key->event == BSP_BTN_CLICK) {
+      s_reading_share_status = YAOGUI_READING_SHARE_HIDDEN;
+    }
+    return;
+  }
+  if (s_model.reading.open && key->button == BSP_BTN_OK &&
+      key->event == BSP_BTN_DOUBLE) {
+    if (yaogui_time_sync_reading_url(s_reading_share_url,
+                                     sizeof(s_reading_share_url))) {
+      s_reading_share_status = YAOGUI_READING_SHARE_QR;
+      bsp_display_backlight(100);
+      s_backlight_dimmed = false;
+      s_screen_off = false;
+      ESP_LOGI(TAG, "打开手机解卦二维码: %s", s_reading_share_url);
+    } else {
+      s_reading_share_status = yaogui_time_sync_connecting()
+                                   ? YAOGUI_READING_SHARE_WAITING
+                                   : YAOGUI_READING_SHARE_UNAVAILABLE;
+      s_reading_share_started_ms = now_ms();
+      ESP_LOGI(TAG,
+               "手机解卦地址尚不可用，状态=%s",
+               yaogui_time_sync_connecting() ? "自动重连中" : "未联网");
+    }
+    return;
+  }
   if (key->button == BSP_BTN_DOWN && key->event == BSP_BTN_LONG) {
     request_time_sync();
     return;
@@ -347,6 +385,9 @@ static void process_key(const key_event_t* key) {
   }
 
   bool request_random = false;
+  const bool starts_new_cast =
+      key->button == BSP_BTN_OK && key->event == BSP_BTN_CLICK &&
+      s_model.phase == YAOGUI_READY && s_model.line_count == 0;
   if (key->event == BSP_BTN_CLICK && key->button == BSP_BTN_UP) {
     request_random = yaogui_model_key(
         &s_model, YAOGUI_KEY_UP, s_last_activity_ms, s_last_activity_ms);
@@ -361,6 +402,10 @@ static void process_key(const key_event_t* key) {
         &s_model, YAOGUI_KEY_OK_LONG, s_last_activity_ms, s_last_activity_ms);
   }
   if (request_random) {
+    if (starts_new_cast) {
+      s_cast_started_at = (int64_t)time(NULL);
+      yaogui_time_sync_clear_reading();
+    }
     const bool request = true;
     ESP_LOGI(TAG, "起卦开始 t=%" PRIu32, s_last_activity_ms);
     if (xQueueSend(s_requests, &request, 0) != pdTRUE) {
@@ -401,6 +446,33 @@ static void tick(lv_timer_t* timer) {
              "动画落定 t=%" PRIu32 "，历时=%" PRIu32 " ms",
              now_ms(),
              now_ms() - s_model.started_ms);
+    if (s_model.line_count == YAOGUI_LINE_COUNT) {
+      uint8_t lines[YAOGUI_LINE_COUNT];
+      for (size_t i = 0; i < YAOGUI_LINE_COUNT; i++) {
+        lines[i] = (uint8_t)s_model.lines[i];
+      }
+      yaogui_time_sync_set_reading(lines, s_cast_started_at);
+      ESP_LOGI(TAG, "第六爻落定，已保存手机解卦快照");
+    }
+  }
+  if (s_reading_share_status == YAOGUI_READING_SHARE_WAITING ||
+      s_reading_share_status == YAOGUI_READING_SHARE_UNAVAILABLE) {
+    if (yaogui_time_sync_reading_url(s_reading_share_url,
+                                     sizeof(s_reading_share_url))) {
+      s_reading_share_status = YAOGUI_READING_SHARE_QR;
+      ESP_LOGI(TAG, "网络就绪，显示手机解卦二维码: %s", s_reading_share_url);
+    } else if (s_reading_share_status == YAOGUI_READING_SHARE_WAITING &&
+               (uint32_t)(now_ms() - s_reading_share_started_ms) >= 20000U) {
+      s_reading_share_status = YAOGUI_READING_SHARE_UNAVAILABLE;
+    }
+  }
+  if (yaogui_time_sync_portal_generation() != s_time_sync_portal_generation) {
+    s_time_sync_portal_generation = yaogui_time_sync_portal_generation();
+    s_time_sync_generation = yaogui_time_sync_generation();
+    s_time_sync_error_generation = yaogui_time_sync_error_generation();
+    s_time_sync_indicator = YAOGUI_TIME_SYNC_WAITING;
+    s_time_sync_started_ms = now_ms();
+    s_standby_entered_ms = s_time_sync_started_ms;
   }
   if (s_time_sync_indicator == YAOGUI_TIME_SYNC_WAITING) {
     if (yaogui_time_sync_generation() != s_time_sync_generation) {
@@ -409,12 +481,6 @@ static void tick(lv_timer_t* timer) {
       s_standby_entered_ms = s_time_sync_started_ms;
     } else if (yaogui_time_sync_error_generation() !=
                s_time_sync_error_generation) {
-      s_time_sync_indicator = YAOGUI_TIME_SYNC_TIMEOUT;
-      s_time_sync_started_ms = now_ms();
-      s_standby_entered_ms = s_time_sync_started_ms;
-    } else if ((uint32_t)(now_ms() - s_time_sync_started_ms) >=
-               TIME_SYNC_TIMEOUT_MS) {
-      (void)yaogui_time_sync_cancel();
       s_time_sync_indicator = YAOGUI_TIME_SYNC_TIMEOUT;
       s_time_sync_started_ms = now_ms();
       s_standby_entered_ms = s_time_sync_started_ms;
@@ -466,6 +532,10 @@ static void tick(lv_timer_t* timer) {
       .day = day,
       .time_valid = time_valid,
       .time_sync_indicator = s_time_sync_indicator,
+      .wifi_ap_ssid = yaogui_time_sync_ap_ssid(),
+      .wifi_status = wifi_status(),
+      .reading_share_status = s_reading_share_status,
+      .reading_share_url = s_reading_share_url,
   };
   yaogui_view_render(s_view, &state);
 }
@@ -569,7 +639,12 @@ esp_err_t yaogui_app_start(void) {
   s_screen_off = false;
   s_standby_active = true;
   s_wake_gesture_active = false;
+  s_reading_share_status = YAOGUI_READING_SHARE_HIDDEN;
+  s_reading_share_started_ms = 0;
+  s_reading_share_url[0] = '\0';
+  s_cast_started_at = 0;
   s_time_sync_indicator = YAOGUI_TIME_SYNC_IDLE;
+  s_time_sync_portal_generation = yaogui_time_sync_portal_generation();
   char date_text[48];
   int minute_of_day;
   int year;
@@ -589,6 +664,9 @@ esp_err_t yaogui_app_start(void) {
       .day = day,
       .time_valid = time_valid,
       .time_sync_indicator = s_time_sync_indicator,
+      .wifi_status = wifi_status(),
+      .reading_share_status = YAOGUI_READING_SHARE_HIDDEN,
+      .reading_share_url = NULL,
   };
   yaogui_view_render(s_view, &state);
   bsp_lvgl_unlock();
@@ -597,7 +675,7 @@ esp_err_t yaogui_app_start(void) {
 
 void yaogui_app_request_time_sync_if_needed(void) {
   if (yaogui_time_sync_required()) {
-    ESP_LOGI(TAG, "当前固件尚未校时或系统时间无效，启动校时热点");
+    ESP_LOGI(TAG, "No saved Wi-Fi credentials; opening provisioning portal");
     request_time_sync();
   }
 }

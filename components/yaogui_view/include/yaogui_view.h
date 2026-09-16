@@ -2,6 +2,7 @@
 
 #include "lvgl.h"
 #include "yaogui_logic.h"
+#include "yaogui_standby.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -16,6 +17,13 @@ typedef enum {
   YAOGUI_TIME_SYNC_TIMEOUT,
 } yaogui_time_sync_indicator_t;
 
+typedef enum {
+  YAOGUI_READING_SHARE_HIDDEN = 0,
+  YAOGUI_READING_SHARE_WAITING,
+  YAOGUI_READING_SHARE_UNAVAILABLE,
+  YAOGUI_READING_SHARE_QR,
+} yaogui_reading_share_status_t;
+
 typedef struct {
   const yaogui_model_t* model;
   uint32_t now_ms;
@@ -29,6 +37,10 @@ typedef struct {
   bool time_valid;
   bool standby_worst_case;
   yaogui_time_sync_indicator_t time_sync_indicator;
+  const char* wifi_ap_ssid;
+  yaogui_wifi_status_t wifi_status;
+  yaogui_reading_share_status_t reading_share_status;
+  const char* reading_share_url;
 } yaogui_view_state_t;
 
 /* 创建完整的 240x320 摇龟界面；调用方负责加载返回视图的 screen。 */

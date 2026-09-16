@@ -17,5 +17,6 @@
 #define LV_USE_LOG 1
 #define LV_LOG_LEVEL LV_LOG_LEVEL_WARN
 #define LV_USE_SNAPSHOT 1
+#define LV_USE_QRCODE 1
 
 #endif  // LV_CONF_H  // NOLINT(build/header_guard)

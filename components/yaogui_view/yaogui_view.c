@@ -60,6 +60,12 @@ struct yaogui_view {
   lv_obj_t* time_sync_panel;
   lv_obj_t* time_sync_label;
   lv_obj_t* time_sync_hint;
+  lv_obj_t* reading_share_panel;
+  lv_obj_t* reading_share_title;
+  lv_obj_t* reading_share_qr;
+  lv_obj_t* reading_share_hint;
+  char rendered_wifi_ap_ssid[33];
+  char rendered_reading_share_url[80];
   _Alignas(4) uint8_t
       coin_pixels[YAOGUI_SHELL_COUNT][INDEXED_FRAME_BYTES(COIN_FRAME_SIZE)];
   lv_image_dsc_t coin_frames[YAOGUI_SHELL_COUNT];
@@ -492,7 +498,7 @@ static void render_reading(yaogui_view_t* view,
   lv_label_set_text(view->reading_badge, page->is_primary ? "主读" : "");
   lv_label_set_text(view->reading_text, page->text);
   lv_label_set_text_fmt(view->reading_footer,
-                        "↑↓滚动·至底换卦\n第%s页·共%s页　OK返回",
+                        "↑↓翻阅·双击OK手机解卦\n第%s页·共%s页　单击OK返回",
                         current_page,
                         total_pages);
   lv_obj_update_layout(view->reading_viewport);
@@ -511,21 +517,42 @@ static void render_time_sync_indicator(yaogui_view_t* view,
   if (state->time_sync_indicator == YAOGUI_TIME_SYNC_WAITING) {
     static const char* const frames[] = {"|", "/", "-", "\\"};
     const char* frame = frames[(state->now_ms / 150U) % 4U];
-    snprintf(text, sizeof(text), "校时热点已开启 %s", frame);
+    snprintf(text, sizeof(text), "赛博六爻等待联网 %s", frame);
     lv_obj_set_pos(view->time_sync_panel, 13, 56);
     lv_obj_set_size(view->time_sync_panel, 214, 208);
     lv_obj_set_pos(view->time_sync_label, 5, 8);
     lv_obj_set_size(view->time_sync_label, 200, 20);
     set_hidden(view->time_sync_hint, false);
+    const char* ap_ssid = state->wifi_ap_ssid && state->wifi_ap_ssid[0]
+                              ? state->wifi_ap_ssid
+                              : "CyberYAO";
+    if (strcmp(view->rendered_wifi_ap_ssid, ap_ssid) != 0) {
+      char hint[160];
+      snprintf(hint,
+               sizeof(hint),
+               "联网用于校时与解读\n\n"
+               "01  打开手机 WiFi\n"
+               "02  连接 %s\n"
+               "03  优先打开\n"
+               "http://cyberyao\n"
+               "打不开再用\n"
+               "http://66.66.66.66",
+               ap_ssid);
+      lv_label_set_text(view->time_sync_hint, hint);
+      snprintf(view->rendered_wifi_ap_ssid,
+               sizeof(view->rendered_wifi_ap_ssid),
+               "%s",
+               ap_ssid);
+    }
   } else if (state->time_sync_indicator == YAOGUI_TIME_SYNC_SUCCESS) {
-    snprintf(text, sizeof(text), "校时完成");
+    snprintf(text, sizeof(text), "联网完成");
     lv_obj_set_pos(view->time_sync_panel, 45, 141);
     lv_obj_set_size(view->time_sync_panel, 150, 38);
     lv_obj_set_pos(view->time_sync_label, 5, 8);
     lv_obj_set_size(view->time_sync_label, 136, 20);
     set_hidden(view->time_sync_hint, true);
   } else {
-    snprintf(text, sizeof(text), "校时超时");
+    snprintf(text, sizeof(text), "请重新联网");
     lv_obj_set_pos(view->time_sync_panel, 45, 141);
     lv_obj_set_size(view->time_sync_panel, 150, 38);
     lv_obj_set_pos(view->time_sync_label, 5, 8);
@@ -534,6 +561,79 @@ static void render_time_sync_indicator(yaogui_view_t* view,
   }
   lv_label_set_text(view->time_sync_label, text);
   set_hidden(view->time_sync_panel, false);
+}
+
+static void create_reading_share_panel(yaogui_view_t* view) {
+  view->reading_share_panel =
+      create_block(view->screen, 0, 0, 240, 320, 0xF7EEDB);
+  lv_obj_set_style_border_width(view->reading_share_panel, 5, 0);
+  lv_obj_set_style_border_color(
+      view->reading_share_panel, lv_color_hex(0x6D2F20), 0);
+
+  view->reading_share_title = ui_pixel_label(
+      view->reading_share_panel, "手机解卦", &yaogui_classic_14, 0x352014);
+  lv_obj_set_pos(view->reading_share_title, 12, 12);
+  lv_obj_set_size(view->reading_share_title, 216, 24);
+  lv_obj_set_style_text_align(
+      view->reading_share_title, LV_TEXT_ALIGN_CENTER, 0);
+  create_block(view->reading_share_panel, 18, 42, 204, 2, 0xA93226);
+
+  view->reading_share_qr = lv_qrcode_create(view->reading_share_panel);
+  lv_qrcode_set_size(view->reading_share_qr, 176);
+  lv_qrcode_set_dark_color(view->reading_share_qr, lv_color_hex(0x24130C));
+  lv_qrcode_set_light_color(view->reading_share_qr, lv_color_hex(0xFFF8E8));
+  lv_qrcode_set_quiet_zone(view->reading_share_qr, true);
+  lv_obj_set_pos(view->reading_share_qr, 32, 52);
+
+  view->reading_share_hint =
+      ui_pixel_label(view->reading_share_panel,
+                     "手机连接同一 WiFi 后扫码\n打开卦象页 · OK返回",
+                     &yaogui_font_14,
+                     0x6D2F20);
+  lv_obj_set_pos(view->reading_share_hint, 10, 244);
+  lv_obj_set_size(view->reading_share_hint, 220, 54);
+  lv_obj_set_style_text_align(
+      view->reading_share_hint, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_style_text_line_space(view->reading_share_hint, 3, 0);
+  set_hidden(view->reading_share_panel, true);
+}
+
+static void render_reading_share(yaogui_view_t* view,
+                                 const yaogui_view_state_t* state) {
+  if (state->reading_share_status == YAOGUI_READING_SHARE_HIDDEN) {
+    set_hidden(view->reading_share_panel, true);
+    return;
+  }
+  if (state->reading_share_status == YAOGUI_READING_SHARE_QR &&
+      state->reading_share_url && state->reading_share_url[0] != '\0') {
+    if (strcmp(view->rendered_reading_share_url, state->reading_share_url) !=
+        0) {
+      lv_qrcode_set_data(view->reading_share_qr, state->reading_share_url);
+      snprintf(view->rendered_reading_share_url,
+               sizeof(view->rendered_reading_share_url),
+               "%s",
+               state->reading_share_url);
+    }
+    lv_label_set_text(view->reading_share_title, "手机解卦");
+    lv_label_set_text(view->reading_share_hint,
+                      "手机连接同一 WiFi 后扫码\n打开卦象页 · OK返回");
+    lv_obj_set_pos(view->reading_share_hint, 10, 244);
+    set_hidden(view->reading_share_qr, false);
+  } else {
+    const bool waiting =
+        state->reading_share_status == YAOGUI_READING_SHARE_WAITING;
+    lv_label_set_text(view->reading_share_title,
+                      waiting ? "正在连接" : "尚未联网");
+    lv_label_set_text(view->reading_share_hint,
+                      waiting ? "正在连接已保存的 WiFi\n"
+                                "成功后自动显示二维码\n\nOK返回"
+                              : "长按下键打开配网\n"
+                                "联网后再双击OK\n\nOK返回");
+    lv_obj_set_pos(view->reading_share_hint, 10, 126);
+    set_hidden(view->reading_share_qr, true);
+  }
+  set_hidden(view->reading_share_panel, false);
+  lv_obj_move_foreground(view->reading_share_panel);
 }
 
 yaogui_view_t* yaogui_view_create(void) {
@@ -637,18 +737,14 @@ yaogui_view_t* yaogui_view_create(void) {
   lv_obj_set_pos(view->time_sync_label, 5, 8);
   lv_obj_set_size(view->time_sync_label, 200, 20);
   lv_obj_set_style_text_align(view->time_sync_label, LV_TEXT_ALIGN_CENTER, 0);
-  view->time_sync_hint = ui_pixel_label(view->time_sync_panel,
-                                        "01  打开手机 WiFi\n\n"
-                                        "02  连接 CyberYAO-Time\n\n"
-                                        "03  页面弹出后自动校时\n\n"
-                                        "备用 192.168.4.1",
-                                        &yaogui_font_14,
-                                        0x6D2F20);
+  view->time_sync_hint =
+      ui_pixel_label(view->time_sync_panel, "", &yaogui_font_14, 0x6D2F20);
   lv_obj_set_pos(view->time_sync_hint, 12, 42);
   lv_obj_set_size(view->time_sync_hint, 186, 150);
   lv_label_set_long_mode(view->time_sync_hint, LV_LABEL_LONG_WRAP);
   lv_obj_set_style_text_line_space(view->time_sync_hint, 2, 0);
   set_hidden(view->time_sync_panel, true);
+  create_reading_share_panel(view);
   return view;
 }
 
@@ -666,6 +762,8 @@ void yaogui_view_render(yaogui_view_t* view, const yaogui_view_state_t* state) {
   if (!view || !state || !state->model) return;
   yaogui_standby_set_visible(view->standby, state->standby);
   render_time_sync_indicator(view, state);
+  render_reading_share(view, state);
+  if (state->reading_share_status != YAOGUI_READING_SHARE_HIDDEN) return;
   if (state->standby) {
     yaogui_standby_render(view->standby,
                           state->now_ms,
@@ -676,7 +774,8 @@ void yaogui_view_render(yaogui_view_t* view, const yaogui_view_state_t* state) {
                           state->month,
                           state->day,
                           state->time_valid,
-                          state->standby_worst_case);
+                          state->standby_worst_case,
+                          state->wifi_status);
     return;
   }
   const yaogui_model_t* model = state->model;
@@ -808,7 +907,7 @@ void yaogui_view_render(yaogui_view_t* view, const yaogui_view_state_t* state) {
         lv_label_set_text(view->controls,
                           "确认键起卦·上键待机\n"
                           "长按确认键重置\n"
-                          "长按下键校时\n"
+                          "长按下键联网\n"
                           "长按上键恢复");
       } else {
         lv_label_set_text_fmt(

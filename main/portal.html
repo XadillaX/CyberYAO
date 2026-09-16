@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#4b2816">
+  <title>CyberYAO 联网</title>
+  <style>
+    :root{color-scheme:light;--wood:#573019;--paper:#d8bd86;--light:#ead6a5;--ink:#2b160d;--red:#8f261c;--green:#405f39}
+    *{box-sizing:border-box}body{min-height:100vh;margin:0;padding:max(16px,env(safe-area-inset-top)) 10px max(22px,env(safe-area-inset-bottom));display:grid;place-items:start center;color:var(--ink);background:radial-gradient(circle at 14% 18%,#0006,transparent 22%),repeating-linear-gradient(0deg,#ffcd7e08 0 1px,transparent 1px 4px),#21130c;font:14px/1.45 system-ui,-apple-system,sans-serif}
+    button,input{font:inherit}.page{position:relative;width:min(100%,430px);min-height:620px;padding:22px;border:5px ridge #2b160c;background:radial-gradient(ellipse at 17% 12%,#200e07ad 0 5%,transparent 6%),repeating-linear-gradient(2deg,transparent 0 7px,#230f0747 8px 9px,transparent 10px 16px),linear-gradient(90deg,#4b2816,#704225 22%,#4f2a17 49%,#7a4928 74%,#442313);box-shadow:inset 0 0 0 3px #9a6a3b,inset 0 0 0 7px #2a140b,inset 0 0 26px #000b,10px 12px 0 #120a06}
+    header{position:relative;padding:15px 62px 17px 15px;border:3px ridge #9a6a3b;color:var(--light);background:repeating-linear-gradient(1deg,transparent 0 5px,#0e05024d 6px 7px,transparent 8px 13px),linear-gradient(90deg,#3b1c0e,#65371d 45%,#402010);box-shadow:inset 0 0 16px #0009,3px 4px 0 #1b0c06}
+    header small{color:#d79453;letter-spacing:.22em}h1{margin:5px 0 4px;font:800 31px/1.1 "Songti SC","STSong",serif;letter-spacing:.12em;text-shadow:2px 2px #1b0c06}header p{margin:0;color:#cba979;font-family:serif}.seal{position:absolute;right:12px;top:12px;width:44px;height:44px;display:grid;place-items:center;border:3px double #c84a35;color:#df7459;font-weight:800;text-align:center;transform:rotate(4deg)}
+    .purpose{margin:15px 4px 12px;padding:10px 11px;border:2px inset #8d6238;background:#d3b77e;box-shadow:inset 2px 2px 7px #361b0c38;font-size:12px}.purpose b{color:var(--red)}
+    .panel{position:relative;margin:8px 4px;padding:12px;border:4px ridge #9a6a3b;background:repeating-linear-gradient(2deg,#3f23100a 0 1px,transparent 1px 5px),var(--paper);box-shadow:inset 0 0 0 2px #4b2917,inset 0 0 28px #47250f57,3px 4px 0 #1a0c06}
+    .head{display:flex;align-items:center;min-height:38px;padding:3px 5px;border-bottom:2px solid #4c2b18}.head h2{margin:0;font:800 18px/1.2 serif}.scan{margin-left:auto;border:0;color:var(--red);background:transparent;font-weight:700}.list{display:grid;gap:8px;padding-top:10px}.network{width:100%;min-height:58px;display:grid;grid-template-columns:28px minmax(0,1fr) auto;align-items:center;gap:7px;padding:9px;border:2px outset #9b7647;color:var(--ink);background:linear-gradient(90deg,#683a231f,transparent 36%),#cfb47e;text-align:left;box-shadow:2px 2px #2e160a6b}.network:active{border-style:inset}.network strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.network small{color:#65452e}.idx{color:var(--red);font-size:11px}.signal{letter-spacing:-1px}.empty{padding:30px 8px;text-align:center;color:#65452e}
+    .form,.result{display:none}.form.on,.result.on{display:block}.list.off{display:none}.form{padding:14px 3px 2px}.chosen{padding-bottom:10px;border-bottom:1px solid #6d4326}.chosen small{display:block;color:var(--red)}label{display:block;margin:12px 0 6px}input{width:100%;height:48px;padding:0 10px;border:3px inset #8d6840;background:#e4ce9d;color:var(--ink);outline:none}input:focus{box-shadow:0 0 0 2px #c79c59}.actions{display:grid;grid-template-columns:1fr 1.6fr;gap:9px;margin-top:14px}.action{min-height:46px;border:3px outset #966b3e;color:var(--light);background:var(--wood);font-weight:800;text-shadow:1px 1px #160a05}.action.primary{border-color:#a24a32;background:#85291e}.action:disabled{opacity:.55}.result{min-height:285px;padding:35px 10px;text-align:center}.symbol{width:70px;height:70px;display:grid;place-items:center;margin:auto;border:4px ridge #a84b35;color:var(--red);background:#ebcf947f;font:800 30px serif}.result h2{font:800 23px serif}.result p{color:#60422e}.steps{display:grid;gap:8px;width:190px;margin:20px auto;text-align:left;font-size:12px}.steps div{color:#2b160d55}.steps .active{color:var(--red)}.steps .done{color:var(--green)}.foot{margin:13px 4px 0;color:#d9bd84;text-align:center;font-size:11px}.loading{padding:25px;text-align:center;color:#65452e}
+    button:focus-visible,input:focus-visible{outline:2px solid #e0a65f;outline-offset:2px}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header><small>六爻 · 入网牒</small><h1>择网通玄</h1><p>录此一契，往后相逢无需重书。</p><span class="seal">六<br>爻</span></header>
+    <p class="purpose">为了让<b>赛博六爻</b>联网，请选择可用 WiFi。时间校准与卦象解读都将通过网络完成。</p>
+    <section class="panel">
+      <div class="head"><h2 id="title">附近 WiFi</h2><button class="scan" id="scan" type="button">重探</button></div>
+      <div class="list" id="list" aria-live="polite"></div>
+      <form class="form" id="form">
+        <p class="chosen"><small>所择网络</small><strong id="ssid"></strong></p>
+        <label for="password">WiFi 密钥</label>
+        <input id="password" type="password" maxlength="64" autocomplete="current-password">
+        <div class="actions"><button class="action" id="back" type="button">返回</button><button class="action primary" id="connect">结网</button></div>
+      </form>
+      <div class="result" id="result" aria-live="polite">
+        <div class="symbol" id="symbol">连</div><h2 id="resultTitle">正在结网</h2>
+        <p id="message">正在验证密钥并向路由器取得地址。</p>
+        <div class="steps" id="steps"><div class="active">验证 WiFi 密钥</div><div>取得网络地址</div><div>保存旧契并联网校时</div></div>
+        <button class="action" id="retry" type="button" hidden>返回修改</button>
+      </div>
+    </section>
+    <p class="foot">主入口 http://cyberyao · 无法打开时使用 http://66.66.66.66</p>
+  </main>
+  <script>
+    if(location.hostname!=="cyberyao"&&location.hostname!=="66.66.66.66")location.replace("http://cyberyao/");
+    const $=id=>document.getElementById(id),STORE="cyberyao.wifi.v2",LEGACY_STORE="cyberyao.wifi.v1";let selected=null,pollTimer=0,connectStarted=0,saved=load();
+    function load(){try{const current=localStorage.getItem(STORE),legacy=localStorage.getItem(LEGACY_STORE),value=JSON.parse(current||legacy||"{}");if(!current&&legacy)localStorage.setItem(STORE,legacy);return value}catch(e){return{}}}
+    function keep(){try{localStorage.setItem(STORE,JSON.stringify(saved))}catch(e){}}
+    const text=(id,value)=>$(id).textContent=value;
+    function view(name){$("list").classList.toggle("off",name!=="list");$("form").classList.toggle("on",name==="form");$("result").classList.toggle("on",name==="result");$("scan").hidden=name!=="list"}
+    function strength(rssi){return rssi>-50?"▂▄▆█":rssi>-70?"▂▄▆·":"▂▄··"}
+    async function scan(){view("list");text("title","附近 WiFi");$("scan").disabled=true;$("list").innerHTML='<p class="loading">探寻附近网络……</p>';try{const r=await fetch("/networks",{cache:"no-store"});if(!r.ok)throw Error();const nets=await r.json();$("list").replaceChildren();nets.forEach((n,i)=>{const b=document.createElement("button");b.type="button";b.className="network";const a=document.createElement("span"),m=document.createElement("span"),s=document.createElement("span"),strong=document.createElement("strong"),small=document.createElement("small");a.className="idx";a.textContent=String(i+1).padStart(2,"0");strong.textContent=n.ssid;small.textContent=(n.open?"开放网络":"加密网络")+(saved[n.ssid]?" · 有旧契":"");m.append(strong,small);s.className="signal";s.textContent=strength(n.rssi);b.append(a,m,s);b.onclick=()=>choose(n);$("list").append(b)});if(!nets.length)$("list").innerHTML='<p class="empty">未发现网络，请重探。</p>'}catch(e){$("list").innerHTML='<p class="empty">探寻失败，请稍后重试。</p>'}$("scan").disabled=false}
+    function choose(n){selected=n;view("form");text("title","录入网络");text("ssid",n.ssid);$("password").value=n.open?"":saved[n.ssid]||"";$("password").disabled=n.open;if(!n.open&&!saved[n.ssid])$("password").focus()}
+    function step(n){[...$("steps").children].forEach((x,i)=>x.className=i<n?"done":i===n?"active":"")}
+    function failed(message){clearInterval(pollTimer);text("symbol","误");text("resultTitle","未能结网");text("message",message);$("retry").hidden=false}
+    async function status(){try{const r=await fetch("/status",{cache:"no-store"}),s=await r.json();if(s.state==="dhcp"){if(!selected.open){saved[selected.ssid]=$("password").value;keep()}step(2);text("symbol","候");text("resultTitle","WiFi 已连接");text("message","已取得地址，正在保存旧契并校准辰光。")}else if(s.state==="online"){clearInterval(pollTimer);[...$("steps").children].forEach(x=>x.className="done");text("symbol","成");text("resultTitle","结网已成");text("message","网络凭据已保存。配置热点即将收起，可以返回赛博六爻。")}else if(s.state==="failed"){failed("本次连接未完成，请重试；连续失败时再检查或修改密钥。")}}catch(e){if(Date.now()-connectStarted>30000)failed("连接过程超时。请重新连接 CyberYAO 配置热点，再返回重试。")}}
+    $("form").onsubmit=async e=>{e.preventDefault();const password=$("password").value;if(!selected.open&&password.length<8){alert("密钥至少需要八个字符。");return}view("result");text("title","结网");text("symbol","连");text("resultTitle","正在结网");text("message","正在验证密钥并向路由器取得地址。");step(0);$("retry").hidden=true;connectStarted=Date.now();try{const body=new URLSearchParams({ssid:selected.ssid,password});const r=await fetch("/connect",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body});if(!r.ok)throw Error();pollTimer=setInterval(status,800);status()}catch(e){failed("请保持连接配置热点后重试。")}};
+    $("scan").onclick=scan;$("back").onclick=scan;$("retry").onclick=()=>choose(selected);scan();
+  </script>
+</body>
+</html>

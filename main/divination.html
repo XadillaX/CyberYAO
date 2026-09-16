@@ -1,0 +1,786 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#29150c">
+  <title>赛博六爻 · 解卦牒</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --night: #21130c;
+      --wood-1: #3b1c0e;
+      --wood-2: #714323;
+      --wood-3: #4b2816;
+      --paper: #d8bd86;
+      --paper-light: #ead7a8;
+      --ink: #2b160d;
+      --ink-soft: #684a32;
+      --cinnabar: #8f261c;
+      --gold: #c79c59;
+      --green: #405f39;
+      --line: #6d4326;
+      --shadow: #120806;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { background: var(--night); }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      padding: max(16px, env(safe-area-inset-top)) 10px max(28px, env(safe-area-inset-bottom));
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 14% 14%, rgba(0, 0, 0, .48), transparent 25%),
+        radial-gradient(circle at 86% 78%, rgba(0, 0, 0, .44), transparent 31%),
+        repeating-linear-gradient(0deg, rgba(255, 205, 126, .025) 0 1px, transparent 1px 4px),
+        var(--night);
+      font: 14px/1.55 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    button, textarea, input { font: inherit; }
+    button { cursor: pointer; }
+
+    .shell {
+      position: relative;
+      width: min(100%, 470px);
+      margin: 0 auto;
+      padding: 18px;
+      border: 5px ridge #2b160c;
+      background:
+        radial-gradient(ellipse at 18% 12%, rgba(27, 10, 4, .68) 0 5%, transparent 6%),
+        radial-gradient(ellipse at 86% 46%, rgba(35, 15, 8, .55) 0 6%, transparent 7%),
+        repeating-linear-gradient(2deg, transparent 0 7px, rgba(35, 15, 7, .28) 8px 9px, transparent 10px 16px),
+        linear-gradient(90deg, var(--wood-3), var(--wood-2) 24%, #4f2a17 51%, #744424 76%, #402010);
+      box-shadow:
+        inset 0 0 0 3px #9a6a3b,
+        inset 0 0 0 7px #2a140b,
+        inset 0 0 28px rgba(0, 0, 0, .72),
+        9px 11px 0 var(--shadow),
+        0 28px 70px rgba(0, 0, 0, .6);
+    }
+
+    .pin {
+      position: absolute;
+      z-index: 3;
+      width: 11px;
+      height: 11px;
+      border: 2px inset #c0985e;
+      border-radius: 50%;
+      background: #3d2415;
+      box-shadow: 0 0 0 1px #170b06;
+    }
+
+    .pin.a { top: 9px; left: 9px; }
+    .pin.b { top: 9px; right: 9px; }
+    .pin.c { bottom: 9px; left: 9px; }
+    .pin.d { right: 9px; bottom: 9px; }
+
+    .masthead {
+      position: relative;
+      padding: 15px 62px 16px 15px;
+      border: 3px ridge #9a6a3b;
+      color: var(--paper-light);
+      background:
+        radial-gradient(ellipse at 18% 34%, rgba(18, 7, 3, .55) 0 8%, transparent 9%),
+        repeating-linear-gradient(1deg, transparent 0 5px, rgba(14, 5, 2, .3) 6px 7px, transparent 8px 13px),
+        linear-gradient(90deg, var(--wood-1), #65371d 45%, #402010);
+      box-shadow: inset 0 0 16px rgba(0, 0, 0, .58), 3px 4px 0 #1b0c06;
+    }
+
+    .eyebrow {
+      color: #d79453;
+      font-size: 11px;
+      letter-spacing: .22em;
+      text-shadow: 1px 1px #1b0c06;
+    }
+
+    h1, h2, h3, p { margin-top: 0; }
+
+    h1 {
+      margin: 5px 0 4px;
+      color: #f0d39a;
+      font: 800 30px/1.12 ui-serif, "Songti SC", "STSong", serif;
+      letter-spacing: .13em;
+      text-shadow: 2px 2px 0 #1b0c06;
+    }
+
+    .masthead p {
+      margin: 0;
+      color: #cba979;
+      font-family: ui-serif, "Songti SC", serif;
+      font-size: 12px;
+    }
+
+    .seal {
+      position: absolute;
+      top: 12px;
+      right: 13px;
+      width: 43px;
+      height: 43px;
+      display: grid;
+      place-items: center;
+      border: 3px double #c84a35;
+      color: #df7459;
+      background: rgba(35, 10, 5, .34);
+      font-weight: 800;
+      line-height: 1.05;
+      text-align: center;
+      transform: rotate(4deg);
+      box-shadow: inset 0 0 8px rgba(0, 0, 0, .5);
+    }
+
+    .connection {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin: 12px 4px 0;
+      color: #d6bb85;
+      font-size: 11px;
+    }
+
+    .connection i {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #7fa16c;
+      box-shadow: 0 0 0 2px rgba(127, 161, 108, .18);
+    }
+
+    .paper {
+      position: relative;
+      margin-top: 12px;
+      padding: 13px;
+      border: 4px ridge #9a6a3b;
+      background:
+        radial-gradient(circle at 8% 13%, rgba(91, 49, 22, .17) 0 3%, transparent 9%),
+        radial-gradient(circle at 88% 78%, rgba(76, 38, 17, .16) 0 5%, transparent 13%),
+        linear-gradient(106deg, transparent 0 47%, rgba(92, 53, 25, .08) 48% 49%, transparent 50%),
+        repeating-linear-gradient(2deg, rgba(63, 35, 16, .04) 0 1px, transparent 1px 5px),
+        var(--paper);
+      box-shadow:
+        inset 0 0 0 2px #4b2917,
+        inset 0 0 28px rgba(71, 37, 15, .34),
+        3px 4px 0 #1a0c06;
+    }
+
+    .paper::after {
+      content: "";
+      position: absolute;
+      inset: 8px;
+      border: 1px dashed rgba(70, 37, 17, .3);
+      pointer-events: none;
+    }
+
+    .paper > * { position: relative; z-index: 1; }
+
+    .section-title {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+      margin: 0 0 10px;
+      padding: 2px 4px 8px;
+      border-bottom: 2px solid var(--line);
+    }
+
+    .section-title h2 {
+      margin: 0;
+      font: 800 18px/1.25 ui-serif, "Songti SC", serif;
+      letter-spacing: .08em;
+    }
+
+    .section-title span {
+      color: var(--cinnabar);
+      font-size: 10px;
+      letter-spacing: .08em;
+    }
+
+    .cast-grid {
+      display: grid;
+      gap: 9px;
+    }
+
+    .cast-row {
+      display: grid;
+      grid-template-columns: 72px minmax(0, 1fr);
+      gap: 10px;
+      align-items: baseline;
+      padding-bottom: 7px;
+      border-bottom: 1px dotted rgba(76, 43, 24, .42);
+    }
+
+    .cast-row:last-child { border-bottom: 0; }
+    .cast-row dt { color: var(--ink-soft); font-size: 12px; }
+    .cast-row dd { margin: 0; font-weight: 700; }
+    .cast-row .accent { color: var(--cinnabar); }
+
+    .hexagram-pair {
+      display: grid;
+      grid-template-columns: 1fr 30px 1fr;
+      gap: 7px;
+      align-items: stretch;
+      margin-top: 12px;
+    }
+
+    .hex-card {
+      padding: 12px 9px;
+      border: 2px outset #9b7647;
+      background: rgba(230, 204, 151, .6);
+      text-align: center;
+      box-shadow: 2px 2px 0 rgba(46, 22, 10, .35);
+    }
+
+    .hex-card small { display: block; color: var(--ink-soft); }
+    .hex-card strong { display: block; margin-top: 3px; color: var(--cinnabar); font: 800 19px ui-serif, serif; }
+    .change-arrow { display: grid; place-items: center; color: var(--cinnabar); font-weight: 900; }
+
+    .field { margin-top: 15px; }
+
+    .field-label {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 7px;
+      font-weight: 800;
+    }
+
+    .field-label small { color: var(--ink-soft); font-weight: 500; }
+
+    .choice-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .choice {
+      min-height: 58px;
+      padding: 8px;
+      border: 3px outset #956c40;
+      color: var(--ink);
+      background: #cdb078;
+      text-align: left;
+      box-shadow: 2px 2px 0 rgba(45, 21, 9, .35);
+    }
+
+    .choice strong { display: block; color: var(--cinnabar); }
+    .choice small { color: var(--ink-soft); }
+    .choice[aria-pressed="true"] {
+      border-style: inset;
+      background: #e2cb98;
+      box-shadow: inset 2px 2px 4px rgba(54, 27, 12, .24);
+    }
+
+    .note {
+      margin: 8px 0 0;
+      padding-left: 9px;
+      border-left: 3px solid rgba(143, 38, 28, .65);
+      color: var(--ink-soft);
+      font-size: 11px;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 116px;
+      resize: vertical;
+      padding: 11px;
+      border: 3px inset #8d6840;
+      border-radius: 0;
+      outline: none;
+      color: var(--ink);
+      background: #e4ce9d;
+      box-shadow: inset 2px 2px 5px rgba(54, 27, 12, .27);
+    }
+
+    textarea:focus {
+      border-color: var(--cinnabar);
+      box-shadow: inset 2px 2px 5px rgba(54, 27, 12, .27), 0 0 0 2px var(--gold);
+    }
+
+    .counter { margin-top: 3px; color: var(--ink-soft); font-size: 10px; text-align: right; }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+    }
+
+    .chip {
+      min-height: 36px;
+      padding: 5px 10px;
+      border: 2px outset #92704a;
+      color: var(--ink);
+      background: #c9ab73;
+    }
+
+    .chip[aria-pressed="true"] {
+      border-color: #a24a32;
+      border-style: inset;
+      color: #f1ddb2;
+      background: var(--cinnabar);
+      text-shadow: 1px 1px #2a1009;
+    }
+
+    .depth {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 7px;
+    }
+
+    .depth .chip { padding-inline: 4px; }
+
+    .skill-box {
+      margin-top: 14px;
+      padding: 11px;
+      border: 2px solid rgba(86, 45, 24, .7);
+      background: rgba(113, 65, 31, .13);
+    }
+
+    .switch-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .switch-copy strong { display: block; }
+    .switch-copy small { color: var(--ink-soft); }
+
+    .switch {
+      position: relative;
+      width: 54px;
+      height: 30px;
+      flex: 0 0 auto;
+      border: 3px inset #7b5736;
+      background: #9e8358;
+    }
+
+    .switch::after {
+      content: "";
+      position: absolute;
+      top: 3px;
+      left: 4px;
+      width: 18px;
+      height: 18px;
+      border: 2px outset #9a6a3b;
+      background: #e0c58f;
+      transition: transform .18s ease;
+    }
+
+    .switch[aria-checked="true"] { background: #6d2f20; }
+    .switch[aria-checked="true"]::after { transform: translateX(23px); }
+
+    .skill-command {
+      display: none;
+      margin: 10px 0 0;
+      padding: 8px;
+      border: 1px dashed var(--line);
+      color: #5f271c;
+      background: rgba(232, 207, 155, .5);
+      font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+      overflow-wrap: anywhere;
+    }
+
+    .skill-box.on .skill-command { display: block; }
+
+    .prompt {
+      max-height: 290px;
+      margin: 0;
+      padding: 12px;
+      overflow: auto;
+      white-space: pre-wrap;
+      border: 3px inset #8d6840;
+      color: #351c10;
+      background: #e7d3a4;
+      font: 12px/1.65 ui-monospace, SFMono-Regular, Menlo, monospace;
+      box-shadow: inset 2px 2px 7px rgba(54, 27, 12, .24);
+    }
+
+    .copy {
+      width: 100%;
+      min-height: 50px;
+      margin-top: 11px;
+      border: 3px outset #a24a32;
+      color: #f2ddb0;
+      background:
+        repeating-linear-gradient(1deg, transparent 0 4px, rgba(17, 6, 2, .22) 5px 6px),
+        #85291e;
+      font-weight: 800;
+      letter-spacing: .09em;
+      text-shadow: 1px 1px #160a05;
+      box-shadow: 3px 3px 0 #2a1009;
+    }
+
+    .copy:active { border-style: inset; transform: translate(2px, 2px); box-shadow: none; }
+    .copy:disabled { cursor: not-allowed; opacity: .48; }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: max(20px, env(safe-area-inset-bottom));
+      z-index: 10;
+      padding: 9px 15px;
+      border: 2px ridge #9a6a3b;
+      color: #f1ddb2;
+      background: #3b1c0e;
+      opacity: 0;
+      pointer-events: none;
+      transform: translate(-50%, 12px);
+      transition: .2s ease;
+      box-shadow: 4px 5px 0 #120806;
+    }
+
+    .toast.on { opacity: 1; transform: translate(-50%, 0); }
+
+    .footer {
+      margin: 14px 0 0;
+      color: #d0ad72;
+      font-size: 10px;
+      text-align: center;
+    }
+
+    button:focus-visible, textarea:focus-visible {
+      outline: 2px solid #e0a65f;
+      outline-offset: 2px;
+    }
+
+    @media (min-width: 760px) {
+      body { padding-top: 28px; }
+      .shell { width: 720px; max-width: calc(100vw - 40px); }
+      .wide-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      .wide-grid .paper { margin-top: 12px; }
+      .prompt { max-height: 360px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <i class="pin a"></i><i class="pin b"></i><i class="pin c"></i><i class="pin d"></i>
+    <header class="masthead">
+      <span class="eyebrow">六爻 · 问卦牒</span>
+      <h1>请卦入机</h1>
+      <p>补全所问，生成解卦 Prompt，再交予 TraeWork。</p>
+      <span class="seal">问<br>卦</span>
+    </header>
+    <p class="connection"><i></i>已连接赛博六爻 · 本机页面</p>
+
+    <section class="paper">
+      <div class="section-title"><h2>起卦信息</h2><span id="lunarState">正在换算农历</span></div>
+      <dl class="cast-grid">
+        <div class="cast-row"><dt>公历</dt><dd id="solarText"></dd></div>
+        <div class="cast-row"><dt>农历</dt><dd id="lunarText"></dd></div>
+        <div class="cast-row"><dt>起卦时刻</dt><dd id="timeText"></dd></div>
+        <div class="cast-row"><dt>动爻</dt><dd class="accent" id="linesText"></dd></div>
+      </dl>
+      <div class="hexagram-pair">
+        <div class="hex-card"><small>本卦</small><strong id="hexagramText"></strong></div>
+        <div class="change-arrow">之</div>
+        <div class="hex-card"><small>变卦</small><strong id="changedText"></strong></div>
+      </div>
+    </section>
+
+    <div class="wide-grid">
+      <section class="paper">
+        <div class="section-title"><h2>求测人</h2><span>请选择</span></div>
+        <div class="choice-grid" id="genderChoices">
+          <button class="choice" type="button" data-gender="乾造" aria-pressed="true">
+            <strong>乾造</strong><small>传统命理中指男性</small>
+          </button>
+          <button class="choice" type="button" data-gender="坤造" aria-pressed="false">
+            <strong>坤造</strong><small>传统命理中指女性</small>
+          </button>
+        </div>
+        <p class="note">六爻中更通用的称呼是“求测人”或“占问人”。乾造、坤造本是命理排盘用语，此处只作为性别选项。</p>
+
+        <div class="field">
+          <div class="field-label"><span>问卦</span><small>请说清所问之事</small></div>
+          <textarea id="question" maxlength="300" placeholder="例如：我是否适合在今年秋天更换工作？应注意哪些风险？"></textarea>
+          <div class="counter"><span id="questionCount">0</span> / 300</div>
+        </div>
+      </section>
+
+      <section class="paper">
+        <div class="section-title"><h2>解读设置</h2><span>可多选</span></div>
+        <div class="field">
+          <div class="field-label"><span>侧重方向</span><small>至少选一项</small></div>
+          <div class="chips" id="focusChoices">
+            <button class="chip" type="button" data-focus="整体判断" aria-pressed="true">整体</button>
+            <button class="chip" type="button" data-focus="应期推断" aria-pressed="true">应期</button>
+            <button class="chip" type="button" data-focus="事业发展" aria-pressed="false">事业</button>
+            <button class="chip" type="button" data-focus="财运变化" aria-pressed="false">财运</button>
+            <button class="chip" type="button" data-focus="情感关系" aria-pressed="false">情感</button>
+            <button class="chip" type="button" data-focus="健康提示" aria-pressed="false">健康</button>
+            <button class="chip" type="button" data-focus="行动建议" aria-pressed="true">决策</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-label"><span>解读深度</span><small>单选</small></div>
+          <div class="depth" id="depthChoices">
+            <button class="chip" type="button" data-depth="简明" aria-pressed="false">简明</button>
+            <button class="chip" type="button" data-depth="标准" aria-pressed="true">标准</button>
+            <button class="chip" type="button" data-depth="详尽" aria-pressed="false">详尽</button>
+          </div>
+        </div>
+
+        <div class="skill-box" id="skillBox">
+          <div class="switch-row">
+            <div class="switch-copy">
+              <strong>使用六爻 Skill</strong>
+              <small>让 TraeWork 先安装专业解卦能力</small>
+            </div>
+            <button class="switch" id="skillSwitch" type="button" role="switch" aria-checked="false" aria-label="使用六爻 Skill"></button>
+          </div>
+          <p class="skill-command">请先从 https://github.com/Johnson-Jia/liuyao-divination 安装六爻 Skill。</p>
+        </div>
+      </section>
+    </div>
+
+    <section class="paper">
+      <div class="section-title"><h2>解卦 Prompt</h2><span>实时生成</span></div>
+      <pre class="prompt" id="promptPreview"></pre>
+      <button class="copy" id="copyButton" type="button" disabled>填写问卦后复制 Prompt</button>
+    </section>
+
+    <p class="footer">复制后打开 TraeWork，粘贴并发送即可开始解卦</p>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite">Prompt 已复制</div>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const DEFAULTS = {
+      hexagram: params.get("hexagram") || "水雷屯",
+      changed: params.get("changed") || "山水蒙",
+      lines: params.get("lines") || "初九、六四",
+      raw: params.get("raw") || "",
+      timestamp: params.get("ts") || new Date().toISOString(),
+    };
+
+    const state = {
+      date: new Date(DEFAULTS.timestamp),
+      lunar: "联网后自动换算",
+      hourBranch: "",
+      hexagram: DEFAULTS.hexagram,
+      changed: DEFAULTS.changed,
+      lines: DEFAULTS.lines,
+      raw: DEFAULTS.raw,
+      gender: "乾造",
+      question: localStorage.getItem("cyberyao.divination.question") || "",
+      focuses: new Set(["整体判断", "应期推断", "行动建议"]),
+      depth: "标准",
+      useSkill: false,
+    };
+
+    const $ = (id) => document.getElementById(id);
+    const pad = (number) => String(number).padStart(2, "0");
+
+    function hourBranch(hour) {
+      const branches = ["子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥"];
+      return branches[Math.floor(((hour + 1) % 24) / 2)];
+    }
+
+    function formatSolar(date) {
+      return `公元 ${date.getFullYear()} 年公历 ${pad(date.getMonth() + 1)} 月 ${pad(date.getDate())} 日`;
+    }
+
+    function formatTime(date) {
+      return `${pad(date.getHours())} 点 ${pad(date.getMinutes())} 分（${state.hourBranch}时）`;
+    }
+
+    function updateLunar() {
+      state.hourBranch = hourBranch(state.date.getHours());
+      try {
+        if (!window.Solar) throw new Error("CDN unavailable");
+        const lunar = Solar.fromDate(state.date).getLunar();
+        state.lunar = `农历${lunar.getMonthInChinese()}月${lunar.getDayInChinese()}`;
+        $("lunarState").textContent = "农历已换算";
+      } catch (error) {
+        state.lunar = "农历换算待联网";
+        $("lunarState").textContent = "CDN 未载入";
+      }
+    }
+
+    function loadLunarLibrary() {
+      if (window.Solar) return;
+      const script = document.createElement("script");
+      script.src = "https://cdn.jsdelivr.net/npm/lunar-javascript@1.7.4/lunar.js";
+      script.async = true;
+      script.onload = () => {
+        updateLunar();
+        render();
+      };
+      script.onerror = () => {
+        $("lunarState").textContent = "CDN 未载入";
+      };
+      document.head.append(script);
+    }
+
+    async function loadDeviceReading() {
+      if (location.protocol !== "http:" && location.protocol !== "https:") return;
+      try {
+        const response = await fetch("/api/reading", { cache: "no-store" });
+        if (!response.ok) return;
+        const reading = await response.json();
+        if (reading.timestamp > 0) state.date = new Date(reading.timestamp * 1000);
+        if (reading.hexagram) state.hexagram = reading.hexagram;
+        if (reading.changed) state.changed = reading.changed;
+        if (reading.lines) state.lines = reading.lines;
+        if (reading.raw) state.raw = reading.raw;
+        updateLunar();
+        render();
+      } catch (error) {
+        // 本地预览或设备暂时离线时继续使用 URL 参数，不阻断页面填写。
+      }
+    }
+
+    function selectedFocuses() {
+      return [...state.focuses];
+    }
+
+    function buildPrompt() {
+      const skillLine = state.useSkill
+        ? "请先从 `https://github.com/Johnson-Jia/liuyao-divination` 安装六爻 Skill。\n\n"
+        : "";
+      const question = state.question.trim() || "（请先填写问卦内容）";
+      const rawLine = state.raw
+        ? `六爻原始爻值（初爻至上爻）：${state.raw}\n`
+        : "";
+      return `${skillLine}请按传统六爻纳甲法，对以下卦例进行${state.depth}解读。
+
+## 占问资料
+- 问卦：${question}
+- 求测人：${state.gender}
+- 起卦方式：赛博六爻设备起卦
+- 起卦时间：${formatSolar(state.date)}，${formatTime(state.date)}
+- 农历：${state.lunar}
+- 时区：北京时间（UTC+8）
+- 本卦：${state.hexagram}
+- 变卦：${state.changed}
+- 动爻：${state.lines}
+${rawLine}- 解读侧重：${selectedFocuses().join("、")}
+
+## 排盘要求
+1. 先核对本卦、变卦与动爻是否一致；如有矛盾，先指出，不要自行补造数据。
+2. 根据起卦时间确定月建、日辰、旬空与六神，并列出世应、六亲、纳甲及动变关系。
+3. 若现有资料不足以可靠排盘，请明确列出缺失项，再基于能够确认的部分作有限解读。
+
+## 断卦顺序
+1. 根据所问事项选取用神，并说明取用理由。
+2. 分析用神、世爻与应爻的旺衰及生克关系。
+3. 检查动爻、变爻、暗动、月破、日破、空亡、合冲、入墓及化进化退。
+4. 综合主卦、变卦和爻象，给出有条件的判断。
+5. 如可推断应期，请说明触发条件和时间范围；证据不足时不要强断具体日期。
+
+## 输出格式
+请依次输出：
+1. 排盘核对
+2. 取用神
+3. 旺衰与动变
+4. 综合判断
+5. 应期参考
+6. 现实建议
+
+请区分“卦象依据”“推断结论”和“现实建议”，不要只复述卦辞，也不要只给一句吉凶。六爻属于传统文化解释，不替代医疗、法律、投资等专业判断。
+
+完成上述分析后，请将全部内容整理为一份结构清晰、适合手机阅读的 HTML 报告，并直接生成可打开的 \`.html\` 文件作为最终交付。`;
+    }
+
+    function render() {
+      $("solarText").textContent = formatSolar(state.date);
+      $("lunarText").textContent = state.lunar;
+      $("timeText").textContent = formatTime(state.date);
+      $("linesText").textContent = state.lines;
+      $("hexagramText").textContent = state.hexagram;
+      $("changedText").textContent = state.changed;
+      $("question").value = state.question;
+      $("questionCount").textContent = state.question.length;
+      $("skillSwitch").setAttribute("aria-checked", String(state.useSkill));
+      $("skillBox").classList.toggle("on", state.useSkill);
+      $("promptPreview").textContent = buildPrompt();
+      const ready = state.question.trim().length > 0 && state.focuses.size > 0;
+      $("copyButton").disabled = !ready;
+      $("copyButton").textContent = ready ? "复制 Prompt，前往 TraeWork" : "填写问卦后复制 Prompt";
+    }
+
+    function togglePressed(button, value) {
+      button.setAttribute("aria-pressed", String(value));
+    }
+
+    document.querySelectorAll("[data-gender]").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.gender = button.dataset.gender;
+        document.querySelectorAll("[data-gender]").forEach((item) => {
+          togglePressed(item, item === button);
+        });
+        render();
+      });
+    });
+
+    document.querySelectorAll("[data-focus]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const focus = button.dataset.focus;
+        if (state.focuses.has(focus)) {
+          if (state.focuses.size === 1) return;
+          state.focuses.delete(focus);
+        } else {
+          state.focuses.add(focus);
+        }
+        togglePressed(button, state.focuses.has(focus));
+        render();
+      });
+    });
+
+    document.querySelectorAll("[data-depth]").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.depth = button.dataset.depth;
+        document.querySelectorAll("[data-depth]").forEach((item) => {
+          togglePressed(item, item === button);
+        });
+        render();
+      });
+    });
+
+    $("question").addEventListener("input", (event) => {
+      state.question = event.target.value;
+      localStorage.setItem("cyberyao.divination.question", state.question);
+      render();
+    });
+
+    $("skillSwitch").addEventListener("click", () => {
+      state.useSkill = !state.useSkill;
+      render();
+    });
+
+    $("copyButton").addEventListener("click", async () => {
+      const prompt = buildPrompt();
+      try {
+        await navigator.clipboard.writeText(prompt);
+      } catch (error) {
+        const area = document.createElement("textarea");
+        area.value = prompt;
+        area.style.position = "fixed";
+        area.style.opacity = "0";
+        document.body.append(area);
+        area.select();
+        document.execCommand("copy");
+        area.remove();
+      }
+      $("toast").classList.add("on");
+      setTimeout(() => $("toast").classList.remove("on"), 1800);
+    });
+
+    updateLunar();
+    render();
+    loadDeviceReading();
+    loadLunarLibrary();
+  </script>
+</body>
+</html>

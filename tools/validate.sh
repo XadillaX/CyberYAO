@@ -40,6 +40,11 @@ run_static_checks() {
         tests/test_yaogui_calendar.c generated/yaogui_calendar_data.c \
         -o "${test_dir}/test_yaogui_calendar"
     "${test_dir}/test_yaogui_calendar"
+    "${CC:-cc}" -std=c11 -Wall -Wextra -Werror \
+        -Imain tests/test_yaogui_network_policy.c \
+        main/yaogui_network_policy.c \
+        -o "${test_dir}/test_yaogui_network_policy"
+    "${test_dir}/test_yaogui_network_policy"
     python3 tests/test_verify_firmware.py
     rm -rf "${test_dir}"
     echo "Host tests: PASS"
@@ -66,6 +71,9 @@ run_firmware_checks() (
     install -m 0644 \
         "${validation_build_dir}/FoloToy-AI-Passport-full.bin" \
         "${repo_root}/build/FoloToy-AI-Passport-full.bin"
+    install -m 0644 \
+        "${validation_build_dir}/FoloToy-AI-Passport.bin" \
+        "${repo_root}/build/FoloToy-AI-Passport.bin"
     echo "Firmware build: PASS"
 )
 

@@ -1,6 +1,7 @@
 #include "yaogui_time_sync.h"
 
 #include <errno.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,10 +10,13 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "esp_app_desc.h"
+#include "esp_event.h"
 #include "esp_http_server.h"
 #include "esp_log.h"
+#include "esp_mac.h"
 #include "esp_netif.h"
+#include "esp_sntp.h"
+#include "esp_timer.h"
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
@@ -21,164 +25,139 @@
 #include "lwip/ip4_addr.h"
 #include "nvs.h"
 #include "nvs_flash.h"
+#include "yaogui_logic.h"
+#include "yaogui_network_policy.h"
 
-static const char* TAG = "yaogui_time";
-static esp_netif_t* s_ap_netif;
-static httpd_handle_t s_http_server;
-static TaskHandle_t s_dns_task;
-static QueueHandle_t s_commands;
-static TaskHandle_t s_service_task;
-static volatile bool s_dns_running;
-static volatile int s_dns_socket = -1;
-static volatile bool s_radio_ready;
-static volatile uint32_t s_sync_generation;
-static volatile uint32_t s_error_generation;
-
-#define TIME_AP_SSID "CyberYAO-Time"
-#define TIME_AP_CHANNEL 1
-#define TIME_AP_MAX_CONNECTIONS 2
-#define SUCCESS_RESPONSE_DELAY_MS 750U
+#define PORTAL_AP_CHANNEL 1
+#define PORTAL_AP_MAX_CONNECTIONS 3
+#define PORTAL_IP_A 66
+#define PORTAL_IP_B 66
+#define PORTAL_IP_C 66
+#define PORTAL_IP_D 66
 #define DNS_PORT 53
 #define DNS_PACKET_MAX 256
 #define DNS_HEADER_SIZE 12
 #define DNS_ANSWER_SIZE 16
 #define DHCP_OFFER_DNS 0x02
-#define APP_ELF_SHA256_SIZE 32
-#define TIME_NVS_NAMESPACE "yaogui_time"
-#define TIME_NVS_SYNC_SHA "sync_sha"
+#define HTTP_BODY_MAX 256
+#define SCAN_RESULT_MAX 12
+#define WIFI_SSID_TEXT_SIZE 33
+#define WIFI_PASSWORD_TEXT_SIZE 65
+#define WIFI_RETRY_DELAY_MS 2000U
+#define WIFI_CONNECT_TIMEOUT_MS 30000U
+#define NTP_WAIT_MS 15000U
+#define NTP_RETRY_MS 30000U
+#define PORTAL_SUCCESS_HOLD_MS 2500U
+#define MONITOR_INTERVAL_MS 1000U
+#define NVS_NAMESPACE "yaogui_net"
+#define NVS_SSID "ssid"
+#define NVS_PASSWORD "password"
 
 typedef enum {
-  TIME_COMMAND_START,
-  TIME_COMMAND_STOP,
-  TIME_COMMAND_STOP_AFTER_RESPONSE,
-} time_command_t;
+  NETWORK_COMMAND_OPEN_PORTAL,
+  NETWORK_COMMAND_CONNECT,
+  NETWORK_COMMAND_GOT_IP,
+  NETWORK_COMMAND_WIFI_FAILED,
+} network_command_type_t;
 
-// Keep the offline document readable as HTML/CSS instead of reflowing strings.
-// clang-format off
-static const char TIME_PAGE[] =
-    "<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\">"
-    "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1,"
-    "viewport-fit=cover\"><meta name=\"theme-color\" content=\"#a73529\">"
-    "<title>CyberYAO 校时</title><style>"
-    ":root{color-scheme:light;--paper:#f2dfb8;--paper2:#e5c98f;"
-    "--ink:#352014;--muted:#72523a;--cinnabar:#a73529;--gold:#bd8c3d}"
-    "*{box-sizing:border-box}html{min-height:100%;background:#c9aa72}"
-    "body{min-height:100vh;margin:0;padding:max(20px,env(safe-area-inset-top))"
-    " 16px max(20px,env(safe-area-inset-bottom));display:grid;"
-    "place-items:center;font-family:'Songti SC','STSong',"
-    "'Noto Serif CJK SC',serif;color:var(--ink);"
-    "background-color:var(--paper2);background-image:linear-gradient(90deg,"
-    "rgba(53,32,20,.055) 1px,transparent 1px),linear-gradient(rgba(53,32,20,"
-    ".045) 1px,transparent 1px);background-size:8px 8px}"
-    ".sheet{position:relative;width:min(100%,430px);padding:30px 24px 24px;"
-    "background:var(--paper);border:3px solid var(--ink);box-shadow:8px 8px 0 "
-    "var(--cinnabar),12px 12px 0 var(--ink)}"
-    ".sheet:before,.sheet:after{content:'';position:absolute;width:13px;"
-    "height:13px;border:2px solid var(--ink);background:var(--gold);top:9px}"
-    ".sheet:before{left:9px}.sheet:after{right:9px}"
-    "header{text-align:center;border-bottom:2px solid var(--ink);"
-    "padding-bottom:"
-    "18px}h1{font-size:clamp(30px,9vw,42px);line-height:1;margin:0 0 10px;"
-    "letter-spacing:.16em;text-indent:.16em}header p{margin:0;"
-    "color:var(--muted);"
-    "font-size:14px;letter-spacing:.08em}.seal{position:absolute;right:20px;"
-    "top:58px;width:42px;height:42px;display:grid;place-items:center;"
-    "border:3px double var(--cinnabar);color:var(--cinnabar);font-weight:700;"
-    "font-size:13px;"
-    "line-height:1.05;transform:rotate(4deg)}"
-    ".dial{position:relative;width:112px;height:112px;margin:24px auto 19px;"
-    "border:3px solid var(--ink);border-radius:50%;box-shadow:inset 0 0 0 5px "
-    "var(--paper),inset 0 0 0 7px var(--cinnabar)}"
-    ".dial:before{content:'';position:absolute;inset:18px;border:2px dashed "
-    "var(--gold);border-radius:50%;animation:turn 5s steps(12,end) infinite}"
-    ".hand{position:absolute;left:52px;top:19px;width:4px;height:43px;"
-    "background:var(--cinnabar);transform-origin:2px 37px;animation:turn 2.4s "
-    "steps(12,end) infinite}.hand:after{content:'';position:absolute;left:-4px;"
-    "bottom:3px;width:12px;height:12px;background:var(--ink)}"
-    "@keyframes turn{to{transform:rotate(360deg)}}"
-    ".status{text-align:center;min-height:84px}.eyebrow{margin:0 0 7px;color:"
-    "var(--cinnabar);font-size:12px;font-weight:700;letter-spacing:.2em}"
-    "#message{margin:0;font-size:21px;font-weight:700;line-height:1.45}"
-    "#detail{margin:7px 0 0;color:var(--muted);font-size:14px;line-height:1.55}"
-    ".progress{height:8px;margin:18px 0 20px;border:2px solid var(--ink);"
-    "background:var(--paper2)}.progress i{display:block;width:34%;height:100%;"
-    "background:var(--cinnabar);animation:seek 1.4s steps(5,end) infinite}"
-    "@keyframes seek{50%{transform:translateX(190%)}}"
-    "button{width:100%;min-height:48px;padding:10px 16px;border:2px solid "
-    "var(--ink);border-radius:0;background:var(--cinnabar);"
-    "box-shadow:4px 4px 0 "
-    "var(--ink);color:var(--paper);font:700 16px/1.2 inherit;letter-spacing:"
-    ".12em;cursor:pointer}button:active{transform:translate(4px,4px);"
-    "box-shadow:none}button:focus-visible{outline:3px solid var(--gold);"
-    "outline-offset:3px}"
-    "button[hidden]{display:none}.fallback{margin:23px 0 0;padding-top:17px;"
-    "border-top:1px dashed var(--muted);font-size:12px;line-height:1.6;color:"
-    "var(--muted);text-align:center}.fallback strong{display:block;color:"
-    "var(--ink);font-size:13px}.url{user-select:all;font-family:ui-monospace,"
-    "monospace;color:var(--cinnabar);font-weight:700;letter-spacing:.02em}"
-    ".ok .dial:before{animation:none;border-style:solid;border-color:"
-    "var(--cinnabar)}.ok .hand{animation:none;transform:rotate(135deg)}"
-    ".ok .progress i{width:100%;animation:none}.fail .dial,.fail .progress{"
-    "border-color:var(--cinnabar)}.fail .hand{animation:none;transform:"
-    "rotate(45deg)}.fail .progress i{width:0;animation:none}"
-    "@media(max-height:610px){.sheet{padding-top:22px}.dial{width:84px;height:"
-    "84px;margin:15px auto}.dial:before{inset:13px}.hand{left:38px;top:13px;"
-    "height:34px;transform-origin:2px 29px}.seal{display:none}}"
-    "@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none"
-    "!important;scroll-behavior:auto!important}.progress i{width:58%}}"
-    "</style></head><body><main class=\"sheet\" id=\"sheet\"><header>"
-    "<h1>校时</h1><p>借手机一刻 · 定龟中辰光</p></header><span class=\"seal\" "
-    "aria-hidden=\"true\">摇<br>龟</span><div class=\"dial\" "
-    "aria-hidden=\"true\"><i class=\"hand\"></i></div>"
-    "<section class=\"status\" aria-live=\"polite\">"
-    "<p class=\"eyebrow\" id=\"eyebrow\">正在感知</p><p id=\"message\">读取手机"
-    "本地时间</p><p id=\"detail\">请勿关闭此页，完成后热点会自动收起。</p>"
-    "</section><div class=\"progress\" aria-hidden=\"true\"><i></i></div>"
-    "<button id=\"retry\" type=\"button\" hidden>重新校时</button>"
-    "<p class=\"fallback\"><strong>页面未自动打开？</strong>保持连接开放 WiFi "
-    "「CyberYAO-Time」，在浏览器输入<span class=\"url\">http://192.168.4.1/"
-    "</span></p></main><script>"
-    "const $=id=>document.getElementById(id),sheet=$('sheet'),retry=$('retry');"
-    "function state(kind,title,msg,detail){sheet.className='sheet '+kind;"
-    "$('eyebrow').textContent=title;$('message').textContent=msg;"
-    "$('detail').textContent=detail;retry.hidden=kind!=='fail'}"
-    "async function sync(){state('','正在校准','将手机时间写入摇龟',"
-    "'请保持当前页面开启。');const d=new Date(),q=new URLSearchParams({"
-    "year:d.getFullYear(),month:d.getMonth()+1,day:d.getDate(),"
-    "hour:d.getHours(),minute:d.getMinutes(),second:d.getSeconds()});"
-    "try{const r=await fetch('/sync?'+q,{cache:'no-store'});"
-    "if(!r.ok)throw Error(await r.text());state('ok','校时完成','辰光已定',"
-    "'热点即将关闭，可以回到 CyberYAO。')}catch(e){state('fail','未能校时',"
-    "'请手动重试','确认仍连接 CyberYAO-Time，再点一次重新校时。')}}"
-    "retry.addEventListener('click',sync);window.addEventListener('load',"
-    "()=>setTimeout(sync,180));</script></body></html>";
-// clang-format on
+typedef struct {
+  network_command_type_t type;
+  char ssid[WIFI_SSID_TEXT_SIZE];
+  char password[WIFI_PASSWORD_TEXT_SIZE];
+} network_command_t;
+
+typedef enum {
+  NETWORK_STATE_PORTAL,
+  NETWORK_STATE_CONNECTING,
+  NETWORK_STATE_DHCP,
+  NETWORK_STATE_ONLINE,
+  NETWORK_STATE_FAILED,
+} network_state_t;
+
+extern const uint8_t portal_html_start[] asm("_binary_portal_html_start");
+extern const uint8_t portal_html_end[] asm("_binary_portal_html_end");
+extern const uint8_t divination_html_start[] asm(
+    "_binary_divination_html_start");
+extern const uint8_t divination_html_end[] asm("_binary_divination_html_end");
+
+typedef struct {
+  uint8_t lines[YAOGUI_LINE_COUNT];
+  int64_t timestamp_seconds;
+  bool valid;
+} reading_snapshot_t;
+
+static const char* TAG = "yaogui_net";
+static esp_netif_t* s_ap_netif;
+static esp_netif_t* s_sta_netif;
+static httpd_handle_t s_http_server;
+static TaskHandle_t s_dns_task;
+static TaskHandle_t s_service_task;
+static QueueHandle_t s_commands;
+static volatile bool s_dns_running;
+static volatile int s_dns_socket = -1;
+static volatile bool s_radio_ready;
+static volatile bool s_sta_has_ip;
+static volatile bool s_ignore_next_disconnect;
+static volatile bool s_ntp_notified;
+static volatile network_state_t s_state = NETWORK_STATE_FAILED;
+static volatile uint32_t s_sync_generation;
+static volatile uint32_t s_error_generation;
+static volatile uint32_t s_portal_generation;
+static bool s_wifi_started;
+static bool s_portal_open;
+static bool s_pending_should_persist;
+static uint32_t s_connect_started_ms;
+static uint32_t s_last_ntp_attempt_ms;
+static network_command_t s_active_credentials;
+static yaogui_network_policy_t s_policy;
+static char s_portal_ap_ssid[WIFI_SSID_TEXT_SIZE] = "CyberYAO";
+static portMUX_TYPE s_reading_lock = portMUX_INITIALIZER_UNLOCKED;
+static reading_snapshot_t s_reading;
+
+static uint32_t now_ms(void) {
+  return (uint32_t)(esp_timer_get_time() / 1000);
+}
+
+static const char* state_name(network_state_t state) {
+  switch (state) {
+    case NETWORK_STATE_PORTAL:
+      return "portal";
+    case NETWORK_STATE_CONNECTING:
+      return "connecting";
+    case NETWORK_STATE_DHCP:
+      return "dhcp";
+    case NETWORK_STATE_ONLINE:
+      return "online";
+    default:
+      return "failed";
+  }
+}
 
 static size_t dns_question_end(const uint8_t* packet, size_t length) {
   size_t offset = DNS_HEADER_SIZE;
   while (offset < length) {
     const uint8_t label_length = packet[offset++];
     if (label_length == 0) break;
-    if ((label_length & 0xC0U) != 0 || label_length > 63 ||
+    if ((label_length & 0xC0U) != 0 || label_length > 63U ||
         offset + label_length > length) {
       return 0;
     }
     offset += label_length;
   }
-  return offset + 4 <= length ? offset + 4 : 0;
+  return offset + 4U <= length ? offset + 4U : 0;
 }
 
 static size_t make_dns_reply(const uint8_t* request,
                              size_t request_length,
                              uint8_t* reply,
                              size_t reply_size) {
-  if (request_length < DNS_HEADER_SIZE || request_length > reply_size ||
-      request[2] & 0x80U || request[4] != 0 || request[5] != 1) {
+  if (!request || !reply || request_length < DNS_HEADER_SIZE ||
+      request_length > reply_size || (request[2] & 0x80U) != 0 ||
+      request[4] != 0 || request[5] != 1) {
     return 0;
   }
   const size_t question_end = dns_question_end(request, request_length);
   if (!question_end) return 0;
-
   memcpy(reply, request, question_end);
   reply[2] = 0x81;
   reply[3] = 0x80;
@@ -189,25 +168,25 @@ static size_t make_dns_reply(const uint8_t* request,
       (uint16_t)((request[question_end - 2] << 8) | request[question_end - 1]);
   if (query_type != 1 || query_class != 1) return question_end;
   if (question_end + DNS_ANSWER_SIZE > reply_size) return 0;
-
   reply[7] = 1;
   uint8_t* answer = reply + question_end;
-  answer[0] = 0xC0;
-  answer[1] = 0x0C;
-  answer[2] = 0;
-  answer[3] = 1;
-  answer[4] = 0;
-  answer[5] = 1;
-  answer[6] = 0;
-  answer[7] = 0;
-  answer[8] = 0;
-  answer[9] = 30;
-  answer[10] = 0;
-  answer[11] = 4;
-  answer[12] = 192;
-  answer[13] = 168;
-  answer[14] = 4;
-  answer[15] = 1;
+  const uint8_t fixed[] = {0xC0,
+                           0x0C,
+                           0,
+                           1,
+                           0,
+                           1,
+                           0,
+                           0,
+                           0,
+                           30,
+                           0,
+                           4,
+                           PORTAL_IP_A,
+                           PORTAL_IP_B,
+                           PORTAL_IP_C,
+                           PORTAL_IP_D};
+  memcpy(answer, fixed, sizeof(fixed));
   return question_end + DNS_ANSWER_SIZE;
 }
 
@@ -215,15 +194,14 @@ static void dns_server_task(void* arg) {
   (void)arg;
   uint8_t request[DNS_PACKET_MAX];
   uint8_t reply[DNS_PACKET_MAX];
-  struct sockaddr_in address = {
+  const struct sockaddr_in address = {
       .sin_family = AF_INET,
       .sin_port = htons(DNS_PORT),
       .sin_addr.s_addr = htonl(INADDR_ANY),
   };
   const int socket_fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
   if (socket_fd < 0 ||
-      bind(socket_fd, (struct sockaddr*)&address, sizeof(address)) < 0) {
-    ESP_LOGE(TAG, "DNS 服务启动失败: errno=%d", errno);
+      bind(socket_fd, (const struct sockaddr*)&address, sizeof(address)) < 0) {
     if (socket_fd >= 0) close(socket_fd);
     s_dns_running = false;
     s_dns_task = NULL;
@@ -234,8 +212,6 @@ static void dns_server_task(void* arg) {
   (void)setsockopt(
       socket_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
   s_dns_socket = socket_fd;
-  ESP_LOGI(TAG, "DNS wildcard 已监听 0.0.0.0:%d", DNS_PORT);
-
   while (s_dns_running) {
     struct sockaddr_storage source;
     socklen_t source_length = sizeof(source);
@@ -248,7 +224,7 @@ static void dns_server_task(void* arg) {
     if (received <= 0) continue;
     const size_t reply_length =
         make_dns_reply(request, (size_t)received, reply, sizeof(reply));
-    if (reply_length) {
+    if (reply_length > 0) {
       (void)sendto(socket_fd,
                    reply,
                    reply_length,
@@ -258,7 +234,6 @@ static void dns_server_task(void* arg) {
     }
   }
   s_dns_socket = -1;
-  shutdown(socket_fd, SHUT_RDWR);
   close(socket_fd);
   s_dns_task = NULL;
   vTaskDelete(NULL);
@@ -270,10 +245,9 @@ static esp_err_t start_dns_server(void) {
   if (xTaskCreate(dns_server_task, "yaogui_dns", 3072, NULL, 4, &s_dns_task) !=
       pdPASS) {
     s_dns_running = false;
-    s_dns_task = NULL;
     return ESP_ERR_NO_MEM;
   }
-  for (unsigned attempt = 0; attempt < 20 && s_dns_socket < 0; attempt++) {
+  for (unsigned attempt = 0; attempt < 20U && s_dns_socket < 0; attempt++) {
     if (!s_dns_task) return ESP_FAIL;
     vTaskDelay(pdMS_TO_TICKS(10));
   }
@@ -282,9 +256,8 @@ static esp_err_t start_dns_server(void) {
 
 static void stop_dns_server(void) {
   s_dns_running = false;
-  const int socket_fd = s_dns_socket;
-  if (socket_fd >= 0) shutdown(socket_fd, SHUT_RDWR);
-  for (unsigned attempt = 0; attempt < 20 && s_dns_task; attempt++) {
+  if (s_dns_socket >= 0) shutdown(s_dns_socket, SHUT_RDWR);
+  for (unsigned attempt = 0; attempt < 20U && s_dns_task; attempt++) {
     vTaskDelay(pdMS_TO_TICKS(10));
   }
   if (s_dns_task) {
@@ -294,246 +267,519 @@ static void stop_dns_server(void) {
   s_dns_socket = -1;
 }
 
-static bool query_number(const char* query, const char* key, int* value) {
-  char text[8];
-  if (httpd_query_key_value(query, key, text, sizeof(text)) != ESP_OK) {
-    return false;
-  }
-  char* end = NULL;
-  int32_t parsed = (int32_t)strtol(text, &end, 10);
-  if (!end || *end != '\0') return false;
-  *value = (int)parsed;
-  return true;
-}
-
 static esp_err_t page_handler(httpd_req_t* request) {
+  if (!s_portal_open) {
+    httpd_resp_set_status(request, "302 Found");
+    httpd_resp_set_hdr(request, "Location", "/guaxiang.html");
+    httpd_resp_set_hdr(request, "Cache-Control", "no-store");
+    return httpd_resp_sendstr(request, "Open the CyberYAO reading page");
+  }
   httpd_resp_set_type(request, "text/html; charset=utf-8");
   httpd_resp_set_hdr(request, "Cache-Control", "no-store");
-  httpd_resp_set_hdr(request, "Pragma", "no-cache");
-  return httpd_resp_send(request, TIME_PAGE, HTTPD_RESP_USE_STRLEN);
+  return httpd_resp_send(request,
+                         (const char*)portal_html_start,
+                         portal_html_end - portal_html_start);
 }
 
-static esp_err_t captive_probe_handler(httpd_req_t* request) {
-  if (strcmp(request->uri, "/hotspot-detect.html") == 0 ||
-      strcmp(request->uri, "/library/test/success.html") == 0) {
-    return page_handler(request);
-  }
-  httpd_resp_set_status(request, "302 Found");
-  httpd_resp_set_hdr(request, "Location", "http://192.168.4.1/");
+static esp_err_t divination_page_handler(httpd_req_t* request) {
+  httpd_resp_set_type(request, "text/html; charset=utf-8");
   httpd_resp_set_hdr(request, "Cache-Control", "no-store");
-  return httpd_resp_sendstr(request, "Open the CyberYAO time portal");
+  return httpd_resp_send(request,
+                         (const char*)divination_html_start,
+                         divination_html_end - divination_html_start);
 }
 
-static esp_err_t sync_handler(httpd_req_t* request) {
-  char query[128];
-  int year;
-  int month;
-  int day;
-  int hour;
-  int minute;
-  int second;
-  if (httpd_req_get_url_query_str(request, query, sizeof(query)) != ESP_OK ||
-      !query_number(query, "year", &year) ||
-      !query_number(query, "month", &month) ||
-      !query_number(query, "day", &day) ||
-      !query_number(query, "hour", &hour) ||
-      !query_number(query, "minute", &minute) ||
-      !query_number(query, "second", &second) || year < 2024 || year > 2099 ||
-      month < 1 || month > 12 || day < 1 || day > 31 || hour < 0 || hour > 23 ||
-      minute < 0 || minute > 59 || second < 0 || second > 59) {
-    httpd_resp_send_err(request, HTTPD_400_BAD_REQUEST, "Invalid local time");
-    return ESP_FAIL;
-  }
+static const char* moving_line_name(size_t index, yaogui_line_t line) {
+  static const char* const yin_names[YAOGUI_LINE_COUNT] = {
+      "初六", "六二", "六三", "六四", "六五", "上六"};
+  static const char* const yang_names[YAOGUI_LINE_COUNT] = {
+      "初九", "九二", "九三", "九四", "九五", "上九"};
+  return yaogui_line_is_yang(line) ? yang_names[index] : yin_names[index];
+}
 
-  struct tm local = {
-      .tm_year = year - 1900,
-      .tm_mon = month - 1,
-      .tm_mday = day,
-      .tm_hour = hour,
-      .tm_min = minute,
-      .tm_sec = second,
-      .tm_isdst = -1,
+static esp_err_t reading_handler(httpd_req_t* request) {
+  reading_snapshot_t snapshot;
+  portENTER_CRITICAL(&s_reading_lock);
+  snapshot = s_reading;
+  portEXIT_CRITICAL(&s_reading_lock);
+  if (!snapshot.valid) {
+    return httpd_resp_send_err(
+        request, HTTPD_404_NOT_FOUND, "no complete reading");
+  }
+  yaogui_line_t lines[YAOGUI_LINE_COUNT];
+  char raw[YAOGUI_LINE_COUNT + 1];
+  char moving[96] = "";
+  size_t moving_length = 0;
+  for (size_t i = 0; i < YAOGUI_LINE_COUNT; i++) {
+    lines[i] = (yaogui_line_t)snapshot.lines[i];
+    raw[i] = (char)('0' + snapshot.lines[i]);
+    if (!yaogui_line_is_old(lines[i])) continue;
+    const char* name = moving_line_name(i, lines[i]);
+    const int written = snprintf(moving + moving_length,
+                                 sizeof(moving) - moving_length,
+                                 "%s%s",
+                                 moving_length == 0 ? "" : "、",
+                                 name);
+    if (written > 0 && (size_t)written < sizeof(moving) - moving_length) {
+      moving_length += (size_t)written;
+    }
+  }
+  raw[YAOGUI_LINE_COUNT] = '\0';
+  if (moving_length == 0) snprintf(moving, sizeof(moving), "无动爻");
+
+  const yaogui_hexagram_t* primary = NULL;
+  const yaogui_hexagram_t* changed = NULL;
+  if (!yaogui_hexagram_from_lines(lines, false, &primary) ||
+      !yaogui_hexagram_from_lines(lines, true, &changed)) {
+    return httpd_resp_send_err(
+        request, HTTPD_500_INTERNAL_SERVER_ERROR, "invalid reading");
+  }
+  char response[384];
+  const int length = snprintf(response,
+                              sizeof(response),
+                              "{\"timestamp\":%" PRId64
+                              ",\"hexagram\":\"%s\",\"changed\":\"%s\","
+                              "\"lines\":\"%s\",\"raw\":\"%s\"}",
+                              snapshot.timestamp_seconds,
+                              primary->name,
+                              changed->name,
+                              moving,
+                              raw);
+  if (length < 0 || (size_t)length >= sizeof(response)) {
+    return httpd_resp_send_err(
+        request, HTTPD_500_INTERNAL_SERVER_ERROR, "reading too large");
+  }
+  httpd_resp_set_type(request, "application/json; charset=utf-8");
+  httpd_resp_set_hdr(request, "Cache-Control", "no-store");
+  return httpd_resp_send(request, response, length);
+}
+
+static esp_err_t status_handler(httpd_req_t* request) {
+  char response[48];
+  snprintf(
+      response, sizeof(response), "{\"state\":\"%s\"}", state_name(s_state));
+  httpd_resp_set_type(request, "application/json");
+  httpd_resp_set_hdr(request, "Cache-Control", "no-store");
+  return httpd_resp_sendstr(request, response);
+}
+
+static esp_err_t send_json_string(httpd_req_t* request,
+                                  const uint8_t* value,
+                                  size_t length) {
+  if (httpd_resp_send_chunk(request, "\"", 1) != ESP_OK) return ESP_FAIL;
+  char chunk[7];
+  for (size_t i = 0; i < length; i++) {
+    const uint8_t byte = value[i];
+    if (byte == '"' || byte == '\\') {
+      const char escaped[2] = {'\\', (char)byte};
+      if (httpd_resp_send_chunk(request, escaped, sizeof(escaped)) != ESP_OK)
+        return ESP_FAIL;
+    } else if (byte < 0x20U) {
+      snprintf(chunk, sizeof(chunk), "\\u%04x", byte);
+      if (httpd_resp_send_chunk(request, chunk, 6) != ESP_OK) return ESP_FAIL;
+    } else if (httpd_resp_send_chunk(request, (const char*)&byte, 1) !=
+               ESP_OK) {
+      return ESP_FAIL;
+    }
+  }
+  return httpd_resp_send_chunk(request, "\"", 1);
+}
+
+static esp_err_t networks_handler(httpd_req_t* request) {
+  if (!s_portal_open) {
+    return httpd_resp_send_err(
+        request, HTTPD_403_FORBIDDEN, "provisioning portal is closed");
+  }
+  wifi_scan_config_t scan = {
+      .show_hidden = true,
   };
-  const struct tm submitted = local;
-  setenv("TZ", "CST-8", 1);
-  tzset();
-  const time_t epoch = mktime(&local);
-  if (epoch < 1700000000 || local.tm_year != submitted.tm_year ||
-      local.tm_mon != submitted.tm_mon || local.tm_mday != submitted.tm_mday ||
-      local.tm_hour != submitted.tm_hour || local.tm_min != submitted.tm_min ||
-      local.tm_sec != submitted.tm_sec) {
-    httpd_resp_send_err(request, HTTPD_400_BAD_REQUEST, "Invalid local time");
-    return ESP_FAIL;
+  esp_err_t error = esp_wifi_scan_start(&scan, true);
+  if (error != ESP_OK) {
+    return httpd_resp_send_err(
+        request, HTTPD_500_INTERNAL_SERVER_ERROR, "scan failed");
   }
+  uint16_t count = SCAN_RESULT_MAX;
+  wifi_ap_record_t records[SCAN_RESULT_MAX];
+  memset(records, 0, sizeof(records));
+  error = esp_wifi_scan_get_ap_records(&count, records);
+  if (error != ESP_OK) {
+    return httpd_resp_send_err(
+        request, HTTPD_500_INTERNAL_SERVER_ERROR, "scan failed");
+  }
+  httpd_resp_set_type(request, "application/json");
+  httpd_resp_set_hdr(request, "Cache-Control", "no-store");
+  if (httpd_resp_send_chunk(request, "[", 1) != ESP_OK) return ESP_FAIL;
+  for (uint16_t i = 0; i < count; i++) {
+    char prefix[32];
+    snprintf(prefix, sizeof(prefix), "%s{\"ssid\":", i == 0 ? "" : ",");
+    if (httpd_resp_sendstr_chunk(request, prefix) != ESP_OK ||
+        send_json_string(request,
+                         records[i].ssid,
+                         strnlen((char*)records[i].ssid, 32U)) != ESP_OK) {
+      return ESP_FAIL;
+    }
+    char suffix[48];
+    snprintf(suffix,
+             sizeof(suffix),
+             ",\"rssi\":%d,\"open\":%s}",
+             records[i].rssi,
+             records[i].authmode == WIFI_AUTH_OPEN ? "true" : "false");
+    if (httpd_resp_sendstr_chunk(request, suffix) != ESP_OK) return ESP_FAIL;
+  }
+  if (httpd_resp_send_chunk(request, "]", 1) != ESP_OK) return ESP_FAIL;
+  return httpd_resp_send_chunk(request, NULL, 0);
+}
 
-  const struct timeval current = {.tv_sec = epoch, .tv_usec = 0};
-  if (settimeofday(&current, NULL) != 0) {
-    httpd_resp_send_err(
-        request, HTTPD_500_INTERNAL_SERVER_ERROR, "Cannot set device time");
-    return ESP_FAIL;
+static esp_err_t connect_handler(httpd_req_t* request) {
+  if (!s_portal_open) {
+    return httpd_resp_send_err(
+        request, HTTPD_403_FORBIDDEN, "provisioning portal is closed");
   }
-  nvs_handle_t nvs;
-  esp_err_t marker_error = nvs_open(TIME_NVS_NAMESPACE, NVS_READWRITE, &nvs);
-  if (marker_error == ESP_OK) {
-    const esp_app_desc_t* app = esp_app_get_description();
-    marker_error = nvs_set_blob(nvs,
-                                TIME_NVS_SYNC_SHA,
-                                app->app_elf_sha256,
-                                sizeof(app->app_elf_sha256));
-    if (marker_error == ESP_OK) marker_error = nvs_commit(nvs);
-    nvs_close(nvs);
+  if (request->content_len <= 0 || request->content_len >= HTTP_BODY_MAX) {
+    return httpd_resp_send_err(request, HTTPD_400_BAD_REQUEST, "invalid body");
   }
-  if (marker_error != ESP_OK) {
-    ESP_LOGW(
-        TAG, "记录当前固件校时标记失败: %s", esp_err_to_name(marker_error));
+  char body[HTTP_BODY_MAX];
+  size_t received = 0;
+  while (received < (size_t)request->content_len) {
+    const int result = httpd_req_recv(
+        request, body + received, (size_t)request->content_len - received);
+    if (result <= 0) {
+      return httpd_resp_send_err(
+          request, HTTPD_400_BAD_REQUEST, "invalid body");
+    }
+    received += (size_t)result;
   }
-  s_sync_generation++;
-  ESP_LOGI(TAG,
-           "Wi-Fi 校时完成: %04d-%02d-%02d %02d:%02d:%02d",
-           year,
-           month,
-           day,
-           hour,
-           minute,
-           second);
-  httpd_resp_set_type(request, "text/plain; charset=utf-8");
-  esp_err_t result =
-      httpd_resp_sendstr(request, "校时完成，CyberYAO-Time 正在关闭。");
-  const time_command_t command = TIME_COMMAND_STOP_AFTER_RESPONSE;
-  (void)xQueueSend(s_commands, &command, 0);
-  return result;
+  body[received] = '\0';
+  network_command_t command = {.type = NETWORK_COMMAND_CONNECT};
+  if (!yaogui_form_value(body, "ssid", command.ssid, sizeof(command.ssid)) ||
+      !yaogui_form_value(
+          body, "password", command.password, sizeof(command.password)) ||
+      command.ssid[0] == '\0') {
+    return httpd_resp_send_err(
+        request, HTTPD_400_BAD_REQUEST, "invalid credentials");
+  }
+  const size_t password_length = strlen(command.password);
+  if (password_length > 0 && password_length < 8U) {
+    return httpd_resp_send_err(
+        request, HTTPD_400_BAD_REQUEST, "invalid password");
+  }
+  if (xQueueSend(s_commands, &command, 0) != pdTRUE) {
+    httpd_resp_set_status(request, "503 Service Unavailable");
+    return httpd_resp_sendstr(request, "busy");
+  }
+  httpd_resp_set_type(request, "application/json");
+  return httpd_resp_sendstr(request, "{\"accepted\":true}");
+}
+
+static esp_err_t captive_handler(httpd_req_t* request) {
+  httpd_resp_set_status(request, "302 Found");
+  httpd_resp_set_hdr(request, "Location", "http://cyberyao/");
+  httpd_resp_set_hdr(request, "Cache-Control", "no-store");
+  return httpd_resp_sendstr(request, "Open the CyberYAO portal");
 }
 
 static esp_err_t start_http_server(void) {
+  if (s_http_server) return ESP_OK;
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-  config.max_uri_handlers = 3;
+  config.max_uri_handlers = 7;
   config.uri_match_fn = httpd_uri_match_wildcard;
   config.lru_purge_enable = true;
   esp_err_t error = httpd_start(&s_http_server, &config);
   if (error != ESP_OK) return error;
-  const httpd_uri_t page = {
-      .uri = "/",
-      .method = HTTP_GET,
-      .handler = page_handler,
+  const httpd_uri_t handlers[] = {
+      {.uri = "/connect", .method = HTTP_POST, .handler = connect_handler},
+      {.uri = "/networks", .method = HTTP_GET, .handler = networks_handler},
+      {.uri = "/status", .method = HTTP_GET, .handler = status_handler},
+      {.uri = "/api/reading", .method = HTTP_GET, .handler = reading_handler},
+      {.uri = "/guaxiang.html",
+       .method = HTTP_GET,
+       .handler = divination_page_handler},
+      {.uri = "/", .method = HTTP_GET, .handler = page_handler},
+      {.uri = "/*", .method = HTTP_GET, .handler = captive_handler},
   };
-  const httpd_uri_t sync = {
-      .uri = "/sync",
-      .method = HTTP_GET,
-      .handler = sync_handler,
-  };
-  const httpd_uri_t captive_probe = {
-      .uri = "/*",
-      .method = HTTP_GET,
-      .handler = captive_probe_handler,
-  };
-  error = httpd_register_uri_handler(s_http_server, &sync);
-  if (error == ESP_OK) {
-    error = httpd_register_uri_handler(s_http_server, &page);
-  }
-  if (error == ESP_OK) {
-    error = httpd_register_uri_handler(s_http_server, &captive_probe);
-  }
-  if (error != ESP_OK) {
-    httpd_stop(s_http_server);
-    s_http_server = NULL;
-  }
-  return error;
-}
-
-static void stop_access_point(void) {
-  s_radio_ready = false;
-  stop_dns_server();
-  if (s_http_server) {
-    httpd_stop(s_http_server);
-    s_http_server = NULL;
-  }
-  esp_err_t error = esp_wifi_stop();
-  if (error != ESP_OK && error != ESP_ERR_WIFI_NOT_INIT) {
-    ESP_LOGW(TAG, "停止 Wi-Fi 热点失败: %s", esp_err_to_name(error));
-  }
-  error = esp_wifi_deinit();
-  if (error != ESP_OK && error != ESP_ERR_WIFI_NOT_INIT) {
-    ESP_LOGW(TAG, "反初始化 Wi-Fi 失败: %s", esp_err_to_name(error));
-  }
-}
-
-static esp_err_t start_access_point(void) {
-  if (s_radio_ready) return ESP_OK;
-  wifi_init_config_t init = WIFI_INIT_CONFIG_DEFAULT();
-  init.nvs_enable = 0;
-  esp_err_t error = esp_wifi_init(&init);
-  if (error != ESP_OK) return error;
-  error = esp_wifi_set_storage(WIFI_STORAGE_RAM);
-  if (error != ESP_OK) goto failure;
-  error = esp_wifi_set_mode(WIFI_MODE_AP);
-  if (error != ESP_OK) goto failure;
-  wifi_config_t config = {0};
-  memcpy(config.ap.ssid, TIME_AP_SSID, sizeof(TIME_AP_SSID));
-  config.ap.ssid_len = sizeof(TIME_AP_SSID) - 1;
-  config.ap.channel = TIME_AP_CHANNEL;
-  config.ap.authmode = WIFI_AUTH_OPEN;
-  config.ap.max_connection = TIME_AP_MAX_CONNECTIONS;
-  error = esp_wifi_set_config(WIFI_IF_AP, &config);
-  if (error != ESP_OK) goto failure;
-  error = esp_wifi_start();
-  if (error != ESP_OK) goto failure;
-  s_radio_ready = true;
-  error = start_dns_server();
-  if (error != ESP_OK) goto failure;
-  error = start_http_server();
-  if (error != ESP_OK) goto failure;
-  ESP_LOGI(TAG,
-           "校时热点与 captive portal 已开启: %s, http://192.168.4.1/",
-           TIME_AP_SSID);
-  return ESP_OK;
-
-failure:
-  stop_access_point();
-  return error;
-}
-
-static void time_service_task(void* arg) {
-  (void)arg;
-  time_command_t command;
-  for (;;) {
-    if (xQueueReceive(s_commands, &command, portMAX_DELAY) != pdTRUE) continue;
-    if (command == TIME_COMMAND_START) {
-      esp_err_t error = start_access_point();
-      if (error != ESP_OK) {
-        s_error_generation++;
-        ESP_LOGE(TAG, "启动校时热点失败: %s", esp_err_to_name(error));
-      }
-    } else {
-      if (command == TIME_COMMAND_STOP_AFTER_RESPONSE) {
-        vTaskDelay(pdMS_TO_TICKS(SUCCESS_RESPONSE_DELAY_MS));
-      }
-      stop_access_point();
-      ESP_LOGI(TAG, "校时热点已关闭");
+  for (size_t i = 0; i < sizeof(handlers) / sizeof(handlers[0]); i++) {
+    error = httpd_register_uri_handler(s_http_server, &handlers[i]);
+    if (error != ESP_OK) {
+      httpd_stop(s_http_server);
+      s_http_server = NULL;
+      return error;
     }
   }
+  return ESP_OK;
 }
 
-esp_err_t yaogui_time_sync_start(void) {
-  esp_err_t error = nvs_flash_init();
-  if (error != ESP_OK) {
-    ESP_LOGE(TAG, "NVS 初始化失败，未擦除现有数据: %s", esp_err_to_name(error));
-    return error;
-  }
-  error = esp_netif_init();
-  if (error != ESP_OK && error != ESP_ERR_INVALID_STATE) return error;
-  error = esp_event_loop_create_default();
-  if (error != ESP_OK && error != ESP_ERR_INVALID_STATE) return error;
-  s_ap_netif = esp_netif_create_default_wifi_ap();
-  if (!s_ap_netif) return ESP_ERR_NO_MEM;
+static void stop_portal_services(void) {
+  stop_dns_server();
+  s_portal_open = false;
+}
 
-  esp_netif_ip_info_t address;
-  IP4_ADDR(&address.ip, 192, 168, 4, 1);
-  IP4_ADDR(&address.gw, 192, 168, 4, 1);
-  IP4_ADDR(&address.netmask, 255, 255, 255, 0);
-  error = esp_netif_dhcps_stop(s_ap_netif);
-  if (error != ESP_OK && error != ESP_ERR_ESP_NETIF_DHCP_ALREADY_STOPPED) {
+static esp_err_t set_wifi_mode(wifi_mode_t mode) {
+  esp_err_t error = esp_wifi_set_mode(mode);
+  if (error != ESP_OK) return error;
+  if (!s_wifi_started) {
+    error = esp_wifi_start();
+    if (error == ESP_OK) {
+      s_wifi_started = true;
+      s_radio_ready = true;
+    }
+  }
+  return error;
+}
+
+static esp_err_t open_portal(void) {
+  if (s_portal_open) return ESP_OK;
+  esp_err_t error = set_wifi_mode(WIFI_MODE_APSTA);
+  if (error != ESP_OK) return error;
+  wifi_config_t config = {0};
+  config.ap.ssid_len = strlen(s_portal_ap_ssid);
+  memcpy(config.ap.ssid, s_portal_ap_ssid, config.ap.ssid_len);
+  config.ap.channel = PORTAL_AP_CHANNEL;
+  config.ap.authmode = WIFI_AUTH_OPEN;
+  config.ap.max_connection = PORTAL_AP_MAX_CONNECTIONS;
+  error = esp_wifi_set_config(WIFI_IF_AP, &config);
+  if (error == ESP_OK) error = start_dns_server();
+  if (error == ESP_OK) error = start_http_server();
+  if (error != ESP_OK) {
+    stop_portal_services();
     return error;
   }
+  s_portal_open = true;
+  s_state = NETWORK_STATE_PORTAL;
+  s_portal_generation++;
+  ESP_LOGI(TAG,
+           "配网热点已开启: %s, http://cyberyao/ (%d.%d.%d.%d)",
+           s_portal_ap_ssid,
+           PORTAL_IP_A,
+           PORTAL_IP_B,
+           PORTAL_IP_C,
+           PORTAL_IP_D);
+  return ESP_OK;
+}
+
+static bool load_credentials(network_command_t* credentials) {
+  if (!credentials) return false;
+  nvs_handle_t nvs;
+  if (nvs_open(NVS_NAMESPACE, NVS_READONLY, &nvs) != ESP_OK) return false;
+  size_t ssid_size = sizeof(credentials->ssid);
+  size_t password_size = sizeof(credentials->password);
+  const esp_err_t ssid_error =
+      nvs_get_str(nvs, NVS_SSID, credentials->ssid, &ssid_size);
+  const esp_err_t password_error =
+      nvs_get_str(nvs, NVS_PASSWORD, credentials->password, &password_size);
+  nvs_close(nvs);
+  credentials->type = NETWORK_COMMAND_CONNECT;
+  return ssid_error == ESP_OK && password_error == ESP_OK &&
+         credentials->ssid[0] != '\0';
+}
+
+static esp_err_t save_credentials(const network_command_t* credentials) {
+  nvs_handle_t nvs;
+  esp_err_t error = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs);
+  if (error != ESP_OK) return error;
+  error = nvs_set_str(nvs, NVS_SSID, credentials->ssid);
+  if (error == ESP_OK) {
+    error = nvs_set_str(nvs, NVS_PASSWORD, credentials->password);
+  }
+  if (error == ESP_OK) error = nvs_commit(nvs);
+  nvs_close(nvs);
+  return error;
+}
+
+static esp_err_t connect_station(const network_command_t* credentials,
+                                 bool should_persist) {
+  if (!credentials || credentials->ssid[0] == '\0') return ESP_ERR_INVALID_ARG;
+  if (should_persist) yaogui_network_policy_begin_wifi_attempt(&s_policy);
+  esp_err_t error =
+      set_wifi_mode(s_portal_open ? WIFI_MODE_APSTA : WIFI_MODE_STA);
+  if (error != ESP_OK) return error;
+  wifi_config_t config = {0};
+  const size_t ssid_length =
+      strnlen(credentials->ssid, sizeof(config.sta.ssid));
+  const size_t password_length =
+      strnlen(credentials->password, sizeof(config.sta.password));
+  memcpy(config.sta.ssid, credentials->ssid, ssid_length);
+  memcpy(config.sta.password, credentials->password, password_length);
+  config.sta.threshold.authmode =
+      password_length == 0 ? WIFI_AUTH_OPEN : WIFI_AUTH_WPA2_PSK;
+  config.sta.pmf_cfg.capable = true;
+  s_ignore_next_disconnect = s_sta_has_ip;
+  s_sta_has_ip = false;
+  s_state = NETWORK_STATE_CONNECTING;
+  error = esp_wifi_set_config(WIFI_IF_STA, &config);
+  if (error == ESP_OK) error = esp_wifi_connect();
+  if (error == ESP_OK) {
+    s_active_credentials = *credentials;
+    s_pending_should_persist = should_persist;
+    s_connect_started_ms = now_ms();
+  }
+  return error;
+}
+
+static void ntp_notification(struct timeval* value) {
+  (void)value;
+  s_ntp_notified = true;
+}
+
+static bool sync_ntp(void) {
+  s_ntp_notified = false;
+  esp_sntp_stop();
+  esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
+  esp_sntp_setservername(0, "pool.ntp.org");
+  esp_sntp_set_time_sync_notification_cb(ntp_notification);
+  esp_sntp_init();
+  const uint32_t started = now_ms();
+  while (!s_ntp_notified && (uint32_t)(now_ms() - started) < NTP_WAIT_MS) {
+    vTaskDelay(pdMS_TO_TICKS(100));
+  }
+  esp_sntp_stop();
+  if (!s_ntp_notified) return false;
+  setenv("TZ", "CST-8", 1);
+  tzset();
+  s_sync_generation++;
+  return true;
+}
+
+static void wifi_event(void* arg,
+                       esp_event_base_t event_base,
+                       int32_t event_id,
+                       void* event_data) {
+  (void)arg;
+  network_command_t command = {0};
+  if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
+    s_sta_has_ip = true;
+    command.type = NETWORK_COMMAND_GOT_IP;
+  } else if (event_base == WIFI_EVENT &&
+             event_id == WIFI_EVENT_STA_DISCONNECTED) {
+    const wifi_event_sta_disconnected_t* disconnected = event_data;
+    ESP_LOGW(TAG,
+             "WiFi 连接断开，reason=%u",
+             disconnected ? disconnected->reason : 0U);
+    s_sta_has_ip = false;
+    if (s_ignore_next_disconnect) {
+      s_ignore_next_disconnect = false;
+      return;
+    }
+    command.type = NETWORK_COMMAND_WIFI_FAILED;
+  } else {
+    return;
+  }
+  if (s_commands) (void)xQueueSend(s_commands, &command, 0);
+}
+
+static void handle_wifi_failure(void) {
+  if (yaogui_network_policy_on_wifi_failure(&s_policy)) {
+    s_state = NETWORK_STATE_FAILED;
+    if (open_portal() != ESP_OK) s_error_generation++;
+    return;
+  }
+  vTaskDelay(pdMS_TO_TICKS(WIFI_RETRY_DELAY_MS));
+  if (esp_wifi_connect() != ESP_OK) {
+    network_command_t retry = {.type = NETWORK_COMMAND_WIFI_FAILED};
+    (void)xQueueSend(s_commands, &retry, 0);
+  }
+}
+
+static void handle_got_ip(void) {
+  s_connect_started_ms = 0;
+  s_state = NETWORK_STATE_DHCP;
+  yaogui_network_policy_on_dhcp(&s_policy, now_ms());
+  if (s_pending_should_persist) {
+    const esp_err_t error = save_credentials(&s_active_credentials);
+    if (error != ESP_OK) {
+      ESP_LOGW(TAG, "DHCP 成功但保存网络凭据失败: %s", esp_err_to_name(error));
+    }
+    s_pending_should_persist = false;
+  }
+  s_last_ntp_attempt_ms = now_ms();
+  if (sync_ntp()) {
+    yaogui_network_policy_on_internet(&s_policy);
+    s_state = NETWORK_STATE_ONLINE;
+    ESP_LOGI(TAG, "已联网并通过 NTP 校时");
+    if (s_portal_open) {
+      vTaskDelay(pdMS_TO_TICKS(PORTAL_SUCCESS_HOLD_MS));
+      stop_portal_services();
+      (void)set_wifi_mode(WIFI_MODE_STA);
+    }
+  } else {
+    ESP_LOGW(TAG, "已取得 DHCP 地址，NTP 暂不可达，将继续后台重试");
+  }
+}
+
+static void monitor_wifi_connection(void) {
+  if (s_state != NETWORK_STATE_CONNECTING ||
+      (uint32_t)(now_ms() - s_connect_started_ms) < WIFI_CONNECT_TIMEOUT_MS) {
+    return;
+  }
+  ESP_LOGW(TAG, "WiFi 连接超过 30 秒，返回配网页");
+  s_state = NETWORK_STATE_FAILED;
+  s_ignore_next_disconnect = true;
+  (void)esp_wifi_disconnect();
+  if (open_portal() != ESP_OK) s_error_generation++;
+}
+
+static void monitor_internet(void) {
+  if (!s_sta_has_ip ||
+      (uint32_t)(now_ms() - s_last_ntp_attempt_ms) < NTP_RETRY_MS) {
+    return;
+  }
+  s_last_ntp_attempt_ms = now_ms();
+  if (sync_ntp()) {
+    yaogui_network_policy_on_internet(&s_policy);
+    s_state = NETWORK_STATE_ONLINE;
+    if (s_portal_open) {
+      vTaskDelay(pdMS_TO_TICKS(PORTAL_SUCCESS_HOLD_MS));
+      stop_portal_services();
+      (void)set_wifi_mode(WIFI_MODE_STA);
+    }
+    return;
+  }
+  if (yaogui_network_policy_on_no_internet(&s_policy, now_ms())) {
+    ESP_LOGW(TAG, "互联网长期不可达，重新开放配网热点");
+    if (open_portal() != ESP_OK) s_error_generation++;
+  }
+}
+
+static void network_service_task(void* arg) {
+  (void)arg;
+  network_command_t saved = {0};
+  if (load_credentials(&saved)) {
+    if (connect_station(&saved, false) != ESP_OK) handle_wifi_failure();
+  } else if (open_portal() != ESP_OK) {
+    s_error_generation++;
+  }
+  for (;;) {
+    network_command_t command;
+    if (xQueueReceive(s_commands,
+                      &command,
+                      pdMS_TO_TICKS(MONITOR_INTERVAL_MS)) == pdTRUE) {
+      switch (command.type) {
+        case NETWORK_COMMAND_OPEN_PORTAL:
+          if (open_portal() != ESP_OK) s_error_generation++;
+          break;
+        case NETWORK_COMMAND_CONNECT:
+          if (connect_station(&command, true) != ESP_OK) handle_wifi_failure();
+          break;
+        case NETWORK_COMMAND_GOT_IP:
+          handle_got_ip();
+          break;
+        case NETWORK_COMMAND_WIFI_FAILED:
+          handle_wifi_failure();
+          break;
+      }
+    }
+    monitor_wifi_connection();
+    monitor_internet();
+  }
+}
+
+static esp_err_t configure_ap_network(void) {
+  esp_netif_ip_info_t address;
+  IP4_ADDR(&address.ip, PORTAL_IP_A, PORTAL_IP_B, PORTAL_IP_C, PORTAL_IP_D);
+  address.gw = address.ip;
+  IP4_ADDR(&address.netmask, 255, 255, 255, 0);
+  esp_err_t error = esp_netif_dhcps_stop(s_ap_netif);
+  if (error != ESP_OK && error != ESP_ERR_ESP_NETIF_DHCP_ALREADY_STOPPED)
+    return error;
   error = esp_netif_set_ip_info(s_ap_netif, &address);
   if (error != ESP_OK) return error;
   esp_netif_dns_info_t dns = {
@@ -546,22 +792,60 @@ esp_err_t yaogui_time_sync_start(void) {
                                  ESP_NETIF_DOMAIN_NAME_SERVER,
                                  &offer_dns,
                                  sizeof(offer_dns));
-  if (error != ESP_OK) return error;
-  error = esp_netif_set_dns_info(s_ap_netif, ESP_NETIF_DNS_MAIN, &dns);
-  if (error != ESP_OK) return error;
-  error = esp_netif_dhcps_start(s_ap_netif);
-  if (error != ESP_OK) return error;
+  if (error == ESP_OK) {
+    error = esp_netif_set_dns_info(s_ap_netif, ESP_NETIF_DNS_MAIN, &dns);
+  }
+  if (error == ESP_OK) error = esp_netif_set_hostname(s_ap_netif, "cyberyao");
+  if (error == ESP_OK) error = esp_netif_dhcps_start(s_ap_netif);
+  return error;
+}
 
-  s_commands = xQueueCreate(4, sizeof(time_command_t));
+esp_err_t yaogui_time_sync_start(void) {
+  esp_err_t error = nvs_flash_init();
+  if (error != ESP_OK) return error;
+  error = esp_netif_init();
+  if (error != ESP_OK && error != ESP_ERR_INVALID_STATE) return error;
+  error = esp_event_loop_create_default();
+  if (error != ESP_OK && error != ESP_ERR_INVALID_STATE) return error;
+  s_ap_netif = esp_netif_create_default_wifi_ap();
+  s_sta_netif = esp_netif_create_default_wifi_sta();
+  if (!s_ap_netif || !s_sta_netif) return ESP_ERR_NO_MEM;
+  error = configure_ap_network();
+  if (error != ESP_OK) return error;
+  wifi_init_config_t init = WIFI_INIT_CONFIG_DEFAULT();
+  init.nvs_enable = 0;
+  error = esp_wifi_init(&init);
+  if (error != ESP_OK) return error;
+  uint8_t softap_mac[6];
+  error = esp_read_mac(softap_mac, ESP_MAC_WIFI_SOFTAP);
+  if (error != ESP_OK ||
+      !yaogui_format_ap_ssid(
+          s_portal_ap_ssid, sizeof(s_portal_ap_ssid), softap_mac)) {
+    return error == ESP_OK ? ESP_ERR_INVALID_SIZE : error;
+  }
+  error = esp_wifi_set_storage(WIFI_STORAGE_RAM);
+  if (error != ESP_OK) return error;
+  error = esp_event_handler_register(
+      WIFI_EVENT, ESP_EVENT_ANY_ID, wifi_event, NULL);
+  if (error == ESP_OK) {
+    error = esp_event_handler_register(
+        IP_EVENT, IP_EVENT_STA_GOT_IP, wifi_event, NULL);
+  }
+  if (error != ESP_OK) return error;
+  error = set_wifi_mode(WIFI_MODE_STA);
+  if (error != ESP_OK) return error;
+  error = start_http_server();
+  if (error != ESP_OK) return error;
+  s_commands = xQueueCreate(6, sizeof(network_command_t));
   if (!s_commands) return ESP_ERR_NO_MEM;
+  yaogui_network_policy_init(&s_policy);
   if (xTaskCreate(
-          time_service_task, "yaogui_time", 4096, NULL, 4, &s_service_task) !=
+          network_service_task, "yaogui_net", 6144, NULL, 4, &s_service_task) !=
       pdPASS) {
     vQueueDelete(s_commands);
     s_commands = NULL;
     return ESP_ERR_NO_MEM;
   }
-  ESP_LOGI(TAG, "Wi-Fi 校时服务已就绪");
   return ESP_OK;
 }
 
@@ -569,18 +853,71 @@ bool yaogui_time_sync_radio_ready(void) {
   return s_radio_ready;
 }
 
+bool yaogui_time_sync_has_ip(void) {
+  return s_sta_has_ip;
+}
+
+bool yaogui_time_sync_internet_ready(void) {
+  return s_state == NETWORK_STATE_ONLINE;
+}
+
+bool yaogui_time_sync_connecting(void) {
+  return s_state == NETWORK_STATE_CONNECTING;
+}
+
+const char* yaogui_time_sync_ap_ssid(void) {
+  return s_portal_ap_ssid;
+}
+
+void yaogui_time_sync_set_reading(const uint8_t lines[YAOGUI_LINE_COUNT],
+                                  int64_t timestamp_seconds) {
+  if (!lines) return;
+  reading_snapshot_t snapshot = {
+      .timestamp_seconds = timestamp_seconds,
+      .valid = true,
+  };
+  for (size_t i = 0; i < YAOGUI_LINE_COUNT; i++) {
+    if (lines[i] < YAOGUI_OLD_YIN || lines[i] > YAOGUI_OLD_YANG) return;
+    snapshot.lines[i] = lines[i];
+  }
+  portENTER_CRITICAL(&s_reading_lock);
+  s_reading = snapshot;
+  portEXIT_CRITICAL(&s_reading_lock);
+}
+
+void yaogui_time_sync_clear_reading(void) {
+  portENTER_CRITICAL(&s_reading_lock);
+  memset(&s_reading, 0, sizeof(s_reading));
+  portEXIT_CRITICAL(&s_reading_lock);
+}
+
+bool yaogui_time_sync_reading_url(char* buffer, size_t buffer_size) {
+  if (!buffer || buffer_size == 0 || !s_sta_has_ip) return false;
+  portENTER_CRITICAL(&s_reading_lock);
+  const bool reading_valid = s_reading.valid;
+  portEXIT_CRITICAL(&s_reading_lock);
+  if (!reading_valid) return false;
+  esp_netif_ip_info_t address;
+  if (!s_sta_netif || esp_netif_get_ip_info(s_sta_netif, &address) != ESP_OK ||
+      address.ip.addr == 0) {
+    return false;
+  }
+  const int written = snprintf(buffer,
+                               buffer_size,
+                               "http://" IPSTR "/guaxiang.html",
+                               IP2STR(&address.ip));
+  return written > 0 && (size_t)written < buffer_size;
+}
+
 esp_err_t yaogui_time_sync_request(void) {
   if (!s_commands || !s_service_task) return ESP_ERR_INVALID_STATE;
-  const time_command_t command = TIME_COMMAND_START;
+  const network_command_t command = {.type = NETWORK_COMMAND_OPEN_PORTAL};
   return xQueueSend(s_commands, &command, 0) == pdTRUE ? ESP_OK
                                                        : ESP_ERR_TIMEOUT;
 }
 
 esp_err_t yaogui_time_sync_cancel(void) {
-  if (!s_commands || !s_service_task) return ESP_ERR_INVALID_STATE;
-  const time_command_t command = TIME_COMMAND_STOP;
-  return xQueueSend(s_commands, &command, 0) == pdTRUE ? ESP_OK
-                                                       : ESP_ERR_TIMEOUT;
+  return ESP_OK;
 }
 
 uint32_t yaogui_time_sync_generation(void) {
@@ -591,19 +928,11 @@ uint32_t yaogui_time_sync_error_generation(void) {
   return s_error_generation;
 }
 
+uint32_t yaogui_time_sync_portal_generation(void) {
+  return s_portal_generation;
+}
+
 bool yaogui_time_sync_required(void) {
-  const time_t current = time(NULL);
-  if (current < 1700000000) return true;
-
-  nvs_handle_t nvs;
-  esp_err_t error = nvs_open(TIME_NVS_NAMESPACE, NVS_READONLY, &nvs);
-  if (error != ESP_OK) return true;
-  uint8_t saved_sha[APP_ELF_SHA256_SIZE];
-  size_t saved_size = sizeof(saved_sha);
-  error = nvs_get_blob(nvs, TIME_NVS_SYNC_SHA, saved_sha, &saved_size);
-  nvs_close(nvs);
-  if (error != ESP_OK || saved_size != sizeof(saved_sha)) return true;
-
-  const esp_app_desc_t* app = esp_app_get_description();
-  return memcmp(saved_sha, app->app_elf_sha256, sizeof(saved_sha)) != 0;
+  network_command_t credentials = {0};
+  return !load_credentials(&credentials);
 }

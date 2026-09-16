@@ -68,6 +68,7 @@ typedef struct {
 struct yaogui_standby {
   lv_obj_t* root;
   lv_obj_t* date;
+  lv_obj_t* wifi_icon;
   lv_obj_t* battery_icon;
   lv_obj_t* battery_percent;
   int battery_fill_width;
@@ -97,6 +98,8 @@ struct yaogui_standby {
   bool static_state_ready;
   bool last_time_valid;
   bool last_worst_case;
+  yaogui_wifi_status_t wifi_status;
+  yaogui_wifi_status_t last_wifi_status;
   int last_battery_percent;
   int last_minute_of_day;
   int last_year;
@@ -207,6 +210,29 @@ static void battery_draw(lv_event_t* event) {
   draw_solid_rect(layer, x, y, x, y + 8, color);
   draw_solid_rect(layer, x + 18, y, x + 18, y + 8, color);
   draw_solid_rect(layer, x + 19, y + 3, x + 20, y + 5, color);
+}
+
+static void wifi_draw(lv_event_t* event) {
+  yaogui_standby_t* standby = lv_event_get_user_data(event);
+  lv_layer_t* layer = lv_event_get_layer(event);
+  if (!standby || !layer) return;
+
+  lv_area_t coords;
+  lv_obj_get_coords(standby->wifi_icon, &coords);
+  const int x = coords.x1;
+  const int y = coords.y1;
+  const uint32_t color = standby->wifi_status == YAOGUI_WIFI_LOCAL
+                             ? 0xA73529
+                             : (standby->night ? 0xCFC5AE : 0x211812);
+
+  /* 14×11 像素 WiFi：两层弧与中心点，不依赖字库。 */
+  draw_solid_rect(layer, x + 3, y + 1, x + 10, y + 1, color);
+  draw_solid_rect(layer, x + 1, y + 2, x + 3, y + 3, color);
+  draw_solid_rect(layer, x + 10, y + 2, x + 12, y + 3, color);
+  draw_solid_rect(layer, x + 4, y + 5, x + 9, y + 5, color);
+  draw_solid_rect(layer, x + 3, y + 6, x + 4, y + 7, color);
+  draw_solid_rect(layer, x + 9, y + 6, x + 10, y + 7, color);
+  draw_solid_rect(layer, x + 6, y + 9, x + 7, y + 10, color);
 }
 
 static lv_point_precise_t point_at(float x, float y, int ox, int oy) {
@@ -345,7 +371,11 @@ yaogui_standby_t* yaogui_standby_create(lv_obj_t* parent) {
 
   standby->date = ui_pixel_label(standby->root, "", &yaogui_font_14, 0x211812);
   lv_obj_set_pos(standby->date, 16, 13);
-  lv_obj_set_size(standby->date, 155, 16);
+  lv_obj_set_size(standby->date, 137, 16);
+  standby->wifi_icon = plain_object(standby->root, 157, 14, 14, 11);
+  lv_obj_add_event_cb(
+      standby->wifi_icon, wifi_draw, LV_EVENT_DRAW_MAIN, standby);
+  set_hidden(standby->wifi_icon, true);
   standby->battery_icon = plain_object(standby->root, 175, 15, 21, 9);
   standby->battery_color = 0x211812;
   lv_obj_add_event_cb(
@@ -521,6 +551,7 @@ static void apply_palette(yaogui_standby_t* standby, bool night) {
   lv_obj_set_style_bg_color(
       standby->root, lv_color_hex(night ? 0x191B21 : 0xE8DCC5), 0);
   lv_obj_set_style_text_color(standby->date, lv_color_hex(foreground), 0);
+  lv_obj_invalidate(standby->wifi_icon);
   standby->battery_color = foreground;
   lv_obj_invalidate(standby->battery_icon);
   lv_obj_set_style_text_color(
@@ -542,10 +573,21 @@ void yaogui_standby_render(yaogui_standby_t* standby,
                            int month,
                            int day,
                            bool time_valid,
-                           bool worst_case) {
+                           bool worst_case,
+                           yaogui_wifi_status_t wifi_status) {
   if (!standby) return;
   if (minute_of_day < 0 || minute_of_day >= 24 * 60) minute_of_day = 12 * 60;
   const bool night = minute_of_day < 6 * 60 || minute_of_day >= 18 * 60;
+  const bool wifi_visible =
+      wifi_status != YAOGUI_WIFI_DISCONNECTED &&
+      (wifi_status != YAOGUI_WIFI_CONNECTING || (now_ms / 400U) % 2U == 0U);
+  set_hidden(standby->wifi_icon, !wifi_visible);
+  if (!standby->static_state_ready ||
+      wifi_status != standby->last_wifi_status ||
+      wifi_status == YAOGUI_WIFI_CONNECTING) {
+    standby->wifi_status = wifi_status;
+    lv_obj_invalidate(standby->wifi_icon);
+  }
   if (!standby->static_state_ready || night != standby->night) {
     standby->night = night;
     apply_palette(standby, night);
@@ -630,6 +672,7 @@ void yaogui_standby_render(yaogui_standby_t* standby,
   standby->static_state_ready = true;
   standby->last_time_valid = time_valid;
   standby->last_worst_case = worst_case;
+  standby->last_wifi_status = wifi_status;
   standby->last_battery_percent = battery;
   standby->last_minute_of_day = minute_of_day;
   standby->last_year = year;
