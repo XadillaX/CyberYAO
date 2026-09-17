@@ -4,6 +4,10 @@
 
 # Changelog
 
+## v1.2.1 - 2026-09-17
+
+- The phone reading page no longer stores the question in `localStorage`. Each new visit starts with an empty question, preventing text from a previous reading from carrying over. Saved Wi-Fi credentials in the provisioning portal are unaffected.
+
 ## v1.2.0 - 2026-09-16
 
 - Replaced the phone time-sync page with the CyberYAO wood-grain Wi-Fi portal. Its hotspot name has a stable suffix derived from the device MAC (for example, `CyberYAO-A1B2C3`); the gateway and DNS use `66.66.66.66`, while `cyberyao` resolves to the captive portal. The page scans nearby networks and stores, restores, and updates passwords per SSID in same-origin `localStorage`. Credentials persist on the device only after DHCP succeeds, followed by NTP synchronization. Three consecutive Wi-Fi failures or five minutes without Internet reopen the portal and the on-device network prompt.

@@ -573,7 +573,7 @@
       lines: DEFAULTS.lines,
       raw: DEFAULTS.raw,
       gender: "乾造",
-      question: localStorage.getItem("cyberyao.divination.question") || "",
+      question: "",
       focuses: new Set(["整体判断", "应期推断", "行动建议"]),
       depth: "标准",
       useSkill: false,
@@ -750,7 +750,6 @@ ${rawLine}- 解读侧重：${selectedFocuses().join("、")}
 
     $("question").addEventListener("input", (event) => {
       state.question = event.target.value;
-      localStorage.setItem("cyberyao.divination.question", state.question);
       render();
     });
 
