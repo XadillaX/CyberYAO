@@ -52,12 +52,8 @@ bool yaogui_format_ap_ssid(char* output,
                            size_t output_size,
                            const uint8_t mac[6]) {
   if (!output || !mac || output_size == 0) return false;
-  const int written = snprintf(output,
-                               output_size,
-                               "CyberYAO-%02X%02X%02X",
-                               mac[3],
-                               mac[4],
-                               mac[5]);
+  const int written = snprintf(
+      output, output_size, "CyberYAO-%02X%02X%02X", mac[3], mac[4], mac[5]);
   return written > 0 && (size_t)written < output_size;
 }
 
