@@ -7,5 +7,25 @@ idf_component_register(
     INCLUDE_DIRS "."
     REQUIRES bsp driver yaogui_view esp_app_format esp_event esp_http_server
              esp_netif esp_timer esp_wifi lwip nvs_flash
-    EMBED_TXTFILES "portal.html" "divination.html"
 )
+
+if(NOT CMAKE_SCRIPT_MODE_FILE)
+    find_program(NODE_EXECUTABLE node REQUIRED)
+    set(WEB_ASSET_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/yaogui_web_assets.c")
+    add_custom_command(
+        OUTPUT "${WEB_ASSET_SOURCE}"
+        COMMAND "${NODE_EXECUTABLE}"
+                "${CMAKE_CURRENT_LIST_DIR}/../tools/build_web_assets.mjs"
+                "${WEB_ASSET_SOURCE}"
+                "${CMAKE_CURRENT_LIST_DIR}/portal.html"
+                "${CMAKE_CURRENT_LIST_DIR}/divination.html"
+        DEPENDS
+            "${CMAKE_CURRENT_LIST_DIR}/../tools/build_web_assets.mjs"
+            "${CMAKE_CURRENT_LIST_DIR}/portal.html"
+            "${CMAKE_CURRENT_LIST_DIR}/divination.html"
+        COMMENT "Minifying and compressing embedded web pages"
+        VERBATIM
+    )
+    set_source_files_properties("${WEB_ASSET_SOURCE}" PROPERTIES GENERATED TRUE)
+    target_sources("${COMPONENT_LIB}" PRIVATE "${WEB_ASSET_SOURCE}")
+endif()

@@ -74,11 +74,10 @@ typedef enum {
   NETWORK_STATE_FAILED,
 } network_state_t;
 
-extern const uint8_t portal_html_start[] asm("_binary_portal_html_start");
-extern const uint8_t portal_html_end[] asm("_binary_portal_html_end");
-extern const uint8_t divination_html_start[] asm(
-    "_binary_divination_html_start");
-extern const uint8_t divination_html_end[] asm("_binary_divination_html_end");
+extern const uint8_t yaogui_portal_html_gz[];
+extern const size_t yaogui_portal_html_gz_size;
+extern const uint8_t yaogui_divination_html_gz[];
+extern const size_t yaogui_divination_html_gz_size;
 
 typedef struct {
   uint8_t lines[YAOGUI_LINE_COUNT];
@@ -275,18 +274,19 @@ static esp_err_t page_handler(httpd_req_t* request) {
     return httpd_resp_sendstr(request, "Open the CyberYAO reading page");
   }
   httpd_resp_set_type(request, "text/html; charset=utf-8");
+  httpd_resp_set_hdr(request, "Content-Encoding", "gzip");
   httpd_resp_set_hdr(request, "Cache-Control", "no-store");
-  return httpd_resp_send(request,
-                         (const char*)portal_html_start,
-                         portal_html_end - portal_html_start);
+  return httpd_resp_send(
+      request, (const char*)yaogui_portal_html_gz, yaogui_portal_html_gz_size);
 }
 
 static esp_err_t divination_page_handler(httpd_req_t* request) {
   httpd_resp_set_type(request, "text/html; charset=utf-8");
+  httpd_resp_set_hdr(request, "Content-Encoding", "gzip");
   httpd_resp_set_hdr(request, "Cache-Control", "no-store");
   return httpd_resp_send(request,
-                         (const char*)divination_html_start,
-                         divination_html_end - divination_html_start);
+                         (const char*)yaogui_divination_html_gz,
+                         yaogui_divination_html_gz_size);
 }
 
 static const char* moving_line_name(size_t index, yaogui_line_t line) {

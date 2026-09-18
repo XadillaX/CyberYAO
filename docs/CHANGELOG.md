@@ -4,6 +4,10 @@
 
 # Changelog
 
+## v1.2.2 - 2026-09-17
+
+- The Wi-Fi portal and phone reading page are now minified at build time and embedded as reproducible gzip data. Browsers handle decompression, while page behavior and the dynamic reading API remain unchanged. This reduces firmware size and local-network transfer volume.
+
 ## v1.2.1 - 2026-09-17
 
 - The phone reading page no longer stores the question in `localStorage`. Each new visit starts with an empty question, preventing text from a previous reading from carrying over. Saved Wi-Fi credentials in the provisioning portal are unaffected.
