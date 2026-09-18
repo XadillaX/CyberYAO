@@ -4,14 +4,12 @@
   "version": "1.0.0",
   "description": "Pinned build-time dependencies for CyberYAO assets",
   "scripts": {
-    "build:web": "node tools/build_web_assets.mjs /tmp/yaogui_web_assets.c main/portal.html main/divination.html",
     "format:c": "./tools/lint-c.sh --fix",
     "lint:c": "./tools/lint-c.sh"
   },
   "devDependencies": {
     "clang-format": "1.6.0",
     "cpplint.js": "1.0.0",
-    "html-minifier-terser": "^7.2.0",
     "lunar-javascript": "^1.7.4",
     "lv_font_conv": "1.5.3"
   }

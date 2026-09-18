@@ -10,17 +10,16 @@ idf_component_register(
 )
 
 if(NOT CMAKE_SCRIPT_MODE_FILE)
-    find_program(NODE_EXECUTABLE node REQUIRED)
     set(WEB_ASSET_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/yaogui_web_assets.c")
     add_custom_command(
         OUTPUT "${WEB_ASSET_SOURCE}"
-        COMMAND "${NODE_EXECUTABLE}"
-                "${CMAKE_CURRENT_LIST_DIR}/../tools/build_web_assets.mjs"
+        COMMAND "${PYTHON}"
+                "${CMAKE_CURRENT_LIST_DIR}/../tools/build_web_assets.py"
                 "${WEB_ASSET_SOURCE}"
                 "${CMAKE_CURRENT_LIST_DIR}/portal.html"
                 "${CMAKE_CURRENT_LIST_DIR}/divination.html"
         DEPENDS
-            "${CMAKE_CURRENT_LIST_DIR}/../tools/build_web_assets.mjs"
+            "${CMAKE_CURRENT_LIST_DIR}/../tools/build_web_assets.py"
             "${CMAKE_CURRENT_LIST_DIR}/portal.html"
             "${CMAKE_CURRENT_LIST_DIR}/divination.html"
         COMMENT "Minifying and compressing embedded web pages"

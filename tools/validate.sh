@@ -12,7 +12,7 @@ run_generated_checks() {
     local web_assets
     python3 tools/generate_assets.py --check
     web_assets="$(mktemp /tmp/yaogui-web-assets.XXXXXX)"
-    node tools/build_web_assets.mjs \
+    python3 tools/build_web_assets.py \
         "${web_assets}" main/portal.html main/divination.html
     rm -f "${web_assets}"
 }
