@@ -4,6 +4,12 @@
 
 # Changelog
 
+## v1.2.4 - 2026-09-28
+
+- Reworked the phone reading page to interpret with the professional `liuyao-divination` Skill by default: the toggle is on out of the box, the generated prompt asks Trae to use (and, if needed, install) the Skill and to output the report following the Skill's own HTML scheme. The switch copy no longer asks the user to install anything by hand. All prompt handoffs now target Trae instead of TraeWork.
+- The cast information now derives the full sexagenary cycle (year, month, day pillars) and the month-command branch from `lunar-javascript` and passes them into the prompt, so the board is cast from explicit ganzhi rather than guessed from the Gregorian date. Added a querent-perspective choice (self vs. on behalf of another) that fixes whether the world or response line is the subject, and an academic/exam focus whose useful gods differ from career.
+- Enriched the interpretation guidance to match the Skill: complete five-relative useful-god selection, dual month/day strength weighting with the twelve life stages, the暗动 vs. day-break distinction, virtual-vs-real triple-harmony, and reversed/repeating-hexagram timing cues. Realigned the output sections to the Skill's spec, adding an essential-judgment step (useful god vs. world line) before detailed analysis.
+
 ## v1.2.2 - 2026-09-17
 
 - The Wi-Fi portal and phone reading page are now minified at build time and embedded as reproducible gzip data. Browsers handle decompression, while page behavior and the dynamic reading API remain unchanged. This reduces firmware size and local-network transfer volume.

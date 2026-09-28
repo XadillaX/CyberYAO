@@ -466,7 +466,7 @@
     <header class="masthead">
       <span class="eyebrow">六爻 · 问卦牒</span>
       <h1>请卦入机</h1>
-      <p>补全所问，生成解卦 Prompt，再交予 TraeWork。</p>
+      <p>补全所问，生成解卦 Prompt，再交予 Trae。</p>
       <span class="seal">问<br>卦</span>
     </header>
     <p class="connection"><i></i>已连接赛博六爻 · 本机页面</p>
@@ -476,6 +476,7 @@
       <dl class="cast-grid">
         <div class="cast-row"><dt>公历</dt><dd id="solarText"></dd></div>
         <div class="cast-row"><dt>农历</dt><dd id="lunarText"></dd></div>
+        <div class="cast-row"><dt>干支</dt><dd id="ganzhiText"></dd></div>
         <div class="cast-row"><dt>起卦时刻</dt><dd id="timeText"></dd></div>
         <div class="cast-row"><dt>动爻</dt><dd class="accent" id="linesText"></dd></div>
       </dl>
@@ -500,6 +501,18 @@
         <p class="note">六爻中更通用的称呼是“求测人”或“占问人”。乾造、坤造本是命理排盘用语，此处只作为性别选项。</p>
 
         <div class="field">
+          <div class="field-label"><span>占问视角</span><small>取用神的关键</small></div>
+          <div class="choice-grid" id="perspectiveChoices">
+            <button class="choice" type="button" data-perspective="自占" aria-pressed="true">
+              <strong>自占</strong><small>为自己所问，以世爻为主</small>
+            </button>
+            <button class="choice" type="button" data-perspective="替他人占" aria-pressed="false">
+              <strong>替他人占</strong><small>为别人所问，以应爻为主</small>
+            </button>
+          </div>
+        </div>
+
+        <div class="field">
           <div class="field-label"><span>问卦</span><small>请说清所问之事</small></div>
           <textarea id="question" maxlength="300" placeholder="例如：我是否适合在今年秋天更换工作？应注意哪些风险？"></textarea>
           <div class="counter"><span id="questionCount">0</span> / 300</div>
@@ -514,6 +527,7 @@
             <button class="chip" type="button" data-focus="整体判断" aria-pressed="true">整体</button>
             <button class="chip" type="button" data-focus="应期推断" aria-pressed="true">应期</button>
             <button class="chip" type="button" data-focus="事业发展" aria-pressed="false">事业</button>
+            <button class="chip" type="button" data-focus="学业考试" aria-pressed="false">学业</button>
             <button class="chip" type="button" data-focus="财运变化" aria-pressed="false">财运</button>
             <button class="chip" type="button" data-focus="情感关系" aria-pressed="false">情感</button>
             <button class="chip" type="button" data-focus="健康提示" aria-pressed="false">健康</button>
@@ -534,11 +548,11 @@
           <div class="switch-row">
             <div class="switch-copy">
               <strong>使用六爻 Skill</strong>
-              <small>让 TraeWork 先安装专业解卦能力</small>
+              <small>用专业解卦能力，报告更规范</small>
             </div>
-            <button class="switch" id="skillSwitch" type="button" role="switch" aria-checked="false" aria-label="使用六爻 Skill"></button>
+            <button class="switch" id="skillSwitch" type="button" role="switch" aria-checked="true" aria-label="使用六爻 Skill"></button>
           </div>
-          <p class="skill-command">请先从 https://github.com/Johnson-Jia/liuyao-divination 安装六爻 Skill。</p>
+          <p class="skill-command">开启后，生成的 Prompt 会让 Trae 自动使用专业六爻 Skill 解卦（若未安装会自行安装），并按其规范输出报告；无需你手动操作。</p>
         </div>
       </section>
     </div>
@@ -549,7 +563,7 @@
       <button class="copy" id="copyButton" type="button" disabled>填写问卦后复制 Prompt</button>
     </section>
 
-    <p class="footer">复制后打开 TraeWork，粘贴并发送即可开始解卦</p>
+    <p class="footer">复制后打开 Trae，粘贴并发送即可开始解卦</p>
   </main>
 
   <div class="toast" id="toast" role="status" aria-live="polite">Prompt 已复制</div>
@@ -567,16 +581,22 @@
     const state = {
       date: new Date(DEFAULTS.timestamp),
       lunar: "联网后自动换算",
+      ganzhi: "待联网换算",
+      ganzhiYear: "",
+      ganzhiMonth: "",
+      ganzhiDay: "",
+      monthBranch: "",
       hourBranch: "",
       hexagram: DEFAULTS.hexagram,
       changed: DEFAULTS.changed,
       lines: DEFAULTS.lines,
       raw: DEFAULTS.raw,
       gender: "乾造",
+      perspective: "自占",
       question: "",
       focuses: new Set(["整体判断", "应期推断", "行动建议"]),
       depth: "标准",
-      useSkill: false,
+      useSkill: true,
     };
 
     const $ = (id) => document.getElementById(id);
@@ -601,9 +621,19 @@
         if (!window.Solar) throw new Error("CDN unavailable");
         const lunar = Solar.fromDate(state.date).getLunar();
         state.lunar = `农历${lunar.getMonthInChinese()}月${lunar.getDayInChinese()}`;
+        state.ganzhiYear = lunar.getYearInGanZhi();
+        state.ganzhiMonth = lunar.getMonthInGanZhi();
+        state.ganzhiDay = lunar.getDayInGanZhi();
+        state.monthBranch = lunar.getMonthInGanZhi().slice(-1);
+        state.ganzhi = `${state.ganzhiYear}年 ${state.ganzhiMonth}月 ${state.ganzhiDay}日`;
         $("lunarState").textContent = "农历已换算";
       } catch (error) {
         state.lunar = "农历换算待联网";
+        state.ganzhi = "待联网换算";
+        state.ganzhiYear = "";
+        state.ganzhiMonth = "";
+        state.ganzhiDay = "";
+        state.monthBranch = "";
         $("lunarState").textContent = "CDN 未载入";
       }
     }
@@ -647,20 +677,27 @@
 
     function buildPrompt() {
       const skillLine = state.useSkill
-        ? "请先从 `https://github.com/Johnson-Jia/liuyao-divination` 安装六爻 Skill。\n\n"
+        ? "请使用 `liuyao-divination` 六爻 Skill 来解卦；如果你当前尚未安装该 Skill，请先从 `https://github.com/Johnson-Jia/liuyao-divination` 安装后再进行。\n\n"
         : "";
       const question = state.question.trim() || "（请先填写问卦内容）";
       const rawLine = state.raw
         ? `六爻原始爻值（初爻至上爻）：${state.raw}\n`
         : "";
+      const htmlLine = state.useSkill
+        ? "完成上述分析后，如果你当前使用了 `liuyao-divination` 六爻 Skill，请按该 Skill 内定义的 HTML 方案生成报告，直接生成可打开的 `.html` 文件作为最终交付。"
+        : "完成上述分析后，请将全部内容整理为一份结构清晰、适合手机阅读的 HTML 报告，并直接生成可打开的 `.html` 文件作为最终交付。";
       return `${skillLine}请按传统六爻纳甲法，对以下卦例进行${state.depth}解读。
 
 ## 占问资料
 - 问卦：${question}
 - 求测人：${state.gender}
+- 占问视角：${state.perspective}（${state.perspective === "自占" ? "以世爻为用神主体" : "以应爻为用神主体"}）
 - 起卦方式：赛博六爻设备起卦
 - 起卦时间：${formatSolar(state.date)}，${formatTime(state.date)}
 - 农历：${state.lunar}
+- 干支：${state.ganzhi}
+- 月建：${state.ganzhiMonth || "待联网换算"}（月令地支：${state.monthBranch || "待联网换算"}）
+- 日辰：${state.ganzhiDay || "待联网换算"}
 - 时区：北京时间（UTC+8）
 - 本卦：${state.hexagram}
 - 变卦：${state.changed}
@@ -669,33 +706,35 @@ ${rawLine}- 解读侧重：${selectedFocuses().join("、")}
 
 ## 排盘要求
 1. 先核对本卦、变卦与动爻是否一致；如有矛盾，先指出，不要自行补造数据。
-2. 根据起卦时间确定月建、日辰、旬空与六神，并列出世应、六亲、纳甲及动变关系。
+2. 以上方“月建、日辰”干支为准排盘（若为“待联网换算”，再据起卦时间自行推算并说明），确定旬空、六神，并列出世应、六亲、纳甲及动变关系。
 3. 若现有资料不足以可靠排盘，请明确列出缺失项，再基于能够确认的部分作有限解读。
 
 ## 断卦顺序
-1. 根据所问事项选取用神，并说明取用理由。
-2. 分析用神、世爻与应爻的旺衰及生克关系。
-3. 检查动爻、变爻、暗动、月破、日破、空亡、合冲、入墓及化进化退。
-4. 综合主卦、变卦和爻象，给出有条件的判断。
-5. 如可推断应期，请说明触发条件和时间范围；证据不足时不要强断具体日期。
+1. 根据所问事项选取用神并说明理由：钱财、财物、妻子、女友取妻财，官职、工作、考试、疾病、丈夫、男友取官鬼，父母、长辈、文书、房屋、车辆、学业取父母，子女、晚辈、下属、医药取子孙，兄弟、同辈、竞争者取兄弟；自占吉凶以世爻为用，占他人或无特定六亲之事看应爻（男占姻缘取妻财、女占取官鬼）。
+2. 以月建、日辰同权判用神旺衰（兼看五行旺相休囚死与十二长生墓库），再分析用神、世爻、应爻以及元神、忌神的生克关系；元神、忌神须有力方能生克，若休囚、月破、化退或入墓则见生不生、虽动不克。
+3. 检查动爻、变爻、暗动、月破、日破、空亡、合冲、入墓及化进化退。其中静爻逢日辰冲，旺相为暗动（有用），休囚才是日破（无用），切勿判反。
+4. 留意三合是否真正成局（单爻独动或仅借月日凑合只是虚合待用，勿当已成实局），并查卦变反吟、伏吟及卦变克主卦等整体走势。
+5. 综合主卦、变卦和爻象，给出有条件的判断。
+6. 如可推断应期，请说明触发条件和时间范围（如衰待生旺、墓待冲、空待填冲）；证据不足时不要强断具体日期。
 
 ## 输出格式
 请依次输出：
-1. 排盘核对
-2. 取用神
-3. 旺衰与动变
-4. 综合判断
-5. 应期参考
+1. 排盘核对（列出月建、日辰、旬空、用神等关键参数）
+2. 本质判断（先以用神与世爻的生克关系定大方向）
+3. 当下分析（逐项点明旺衰、动静暗破、化变合墓，关键辨析处讲清依据）
+4. 综合定性（分层、有条件的结论）
+5. 应期参考（给出有依据的时间窗口）
 6. 现实建议
 
 请区分“卦象依据”“推断结论”和“现实建议”，不要只复述卦辞，也不要只给一句吉凶。六爻属于传统文化解释，不替代医疗、法律、投资等专业判断。
 
-完成上述分析后，请将全部内容整理为一份结构清晰、适合手机阅读的 HTML 报告，并直接生成可打开的 \`.html\` 文件作为最终交付。`;
+${htmlLine}`;
     }
 
     function render() {
       $("solarText").textContent = formatSolar(state.date);
       $("lunarText").textContent = state.lunar;
+      $("ganzhiText").textContent = state.ganzhi;
       $("timeText").textContent = formatTime(state.date);
       $("linesText").textContent = state.lines;
       $("hexagramText").textContent = state.hexagram;
@@ -707,7 +746,7 @@ ${rawLine}- 解读侧重：${selectedFocuses().join("、")}
       $("promptPreview").textContent = buildPrompt();
       const ready = state.question.trim().length > 0 && state.focuses.size > 0;
       $("copyButton").disabled = !ready;
-      $("copyButton").textContent = ready ? "复制 Prompt，前往 TraeWork" : "填写问卦后复制 Prompt";
+      $("copyButton").textContent = ready ? "复制 Prompt，前往 Trae" : "填写问卦后复制 Prompt";
     }
 
     function togglePressed(button, value) {
@@ -718,6 +757,16 @@ ${rawLine}- 解读侧重：${selectedFocuses().join("、")}
       button.addEventListener("click", () => {
         state.gender = button.dataset.gender;
         document.querySelectorAll("[data-gender]").forEach((item) => {
+          togglePressed(item, item === button);
+        });
+        render();
+      });
+    });
+
+    document.querySelectorAll("[data-perspective]").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.perspective = button.dataset.perspective;
+        document.querySelectorAll("[data-perspective]").forEach((item) => {
           togglePressed(item, item === button);
         });
         render();
