@@ -768,6 +768,7 @@ void yaogui_view_render(yaogui_view_t* view, const yaogui_view_state_t* state) {
     yaogui_standby_render(view->standby,
                           state->now_ms,
                           state->battery_percent,
+                          state->charging,
                           state->minute_of_day,
                           state->date_text,
                           state->year,

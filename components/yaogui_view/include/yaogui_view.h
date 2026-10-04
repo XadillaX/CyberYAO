@@ -28,6 +28,7 @@ typedef struct {
   const yaogui_model_t* model;
   uint32_t now_ms;
   int battery_percent;
+  bool charging;
   bool standby;
   int minute_of_day;
   const char* date_text;

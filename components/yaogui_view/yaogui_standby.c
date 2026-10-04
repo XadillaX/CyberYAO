@@ -72,7 +72,9 @@ struct yaogui_standby {
   lv_obj_t* battery_icon;
   lv_obj_t* battery_percent;
   int battery_fill_width;
+  bool charging;
   uint32_t battery_color;
+  uint32_t battery_bg_color;
   lv_obj_t* time;
   lv_obj_t* period;
   lv_obj_t* sundial;
@@ -98,6 +100,7 @@ struct yaogui_standby {
   bool static_state_ready;
   bool last_time_valid;
   bool last_worst_case;
+  bool last_charging;
   yaogui_wifi_status_t wifi_status;
   yaogui_wifi_status_t last_wifi_status;
   int last_battery_percent;
@@ -201,7 +204,17 @@ static void battery_draw(lv_event_t* event) {
   const int x = coords.x1;
   const int y = coords.y1;
   const uint32_t color = standby->battery_color;
-  if (standby->battery_fill_width > 0) {
+  if (standby->charging) {
+    // 充电时把电量区填满实心，再用背景色「抠」出闪电：实心不空心，
+    // 反白闪电对比最强、形状清晰，且不额外占用状态栏宽度。
+    const uint32_t bg = standby->battery_bg_color;
+    draw_solid_rect(layer, x + 2, y + 2, x + 16, y + 6, color);
+    draw_solid_rect(layer, x + 10, y + 2, x + 11, y + 2, bg);
+    draw_solid_rect(layer, x + 9, y + 3, x + 10, y + 3, bg);
+    draw_solid_rect(layer, x + 7, y + 4, x + 11, y + 4, bg);
+    draw_solid_rect(layer, x + 8, y + 5, x + 9, y + 5, bg);
+    draw_solid_rect(layer, x + 7, y + 6, x + 8, y + 6, bg);
+  } else if (standby->battery_fill_width > 0) {
     draw_solid_rect(
         layer, x + 2, y + 2, x + 1 + standby->battery_fill_width, y + 6, color);
   }
@@ -378,11 +391,12 @@ yaogui_standby_t* yaogui_standby_create(lv_obj_t* parent) {
   set_hidden(standby->wifi_icon, true);
   standby->battery_icon = plain_object(standby->root, 175, 15, 21, 9);
   standby->battery_color = 0x211812;
+  standby->battery_bg_color = 0xE8DCC5;
   lv_obj_add_event_cb(
       standby->battery_icon, battery_draw, LV_EVENT_DRAW_MAIN, standby);
   standby->battery_percent =
       ui_pixel_label(standby->root, "", &yaogui_standby_pixel_10, 0x211812);
-  lv_obj_set_pos(standby->battery_percent, 198, 13);
+  lv_obj_set_pos(standby->battery_percent, 198, 15);
   lv_obj_set_size(standby->battery_percent, 26, 13);
   lv_obj_set_style_text_align(standby->battery_percent, LV_TEXT_ALIGN_RIGHT, 0);
 
@@ -553,6 +567,7 @@ static void apply_palette(yaogui_standby_t* standby, bool night) {
   lv_obj_set_style_text_color(standby->date, lv_color_hex(foreground), 0);
   lv_obj_invalidate(standby->wifi_icon);
   standby->battery_color = foreground;
+  standby->battery_bg_color = night ? 0x191B21 : 0xE8DCC5;
   lv_obj_invalidate(standby->battery_icon);
   lv_obj_set_style_text_color(
       standby->battery_percent, lv_color_hex(foreground), 0);
@@ -567,6 +582,7 @@ static void apply_palette(yaogui_standby_t* standby, bool night) {
 void yaogui_standby_render(yaogui_standby_t* standby,
                            uint32_t now_ms,
                            int battery_percent,
+                           bool charging,
                            int minute_of_day,
                            const char* date_text,
                            int year,
@@ -630,6 +646,10 @@ void yaogui_standby_render(yaogui_standby_t* standby,
     lv_obj_invalidate(standby->battery_icon);
     lv_label_set_text_fmt(standby->battery_percent, "%d%%", battery);
   }
+  if (!standby->static_state_ready || charging != standby->last_charging) {
+    standby->charging = charging;
+    if (battery >= 0) lv_obj_invalidate(standby->battery_icon);
+  }
   if (!standby->static_state_ready || time_valid != standby->last_time_valid ||
       minute_of_day != standby->last_minute_of_day) {
     if (time_valid) {
@@ -672,6 +692,7 @@ void yaogui_standby_render(yaogui_standby_t* standby,
   standby->static_state_ready = true;
   standby->last_time_valid = time_valid;
   standby->last_worst_case = worst_case;
+  standby->last_charging = charging;
   standby->last_wifi_status = wifi_status;
   standby->last_battery_percent = battery;
   standby->last_minute_of_day = minute_of_day;

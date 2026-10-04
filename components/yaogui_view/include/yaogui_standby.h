@@ -16,6 +16,7 @@ void yaogui_standby_set_visible(yaogui_standby_t* standby, bool visible);
 void yaogui_standby_render(yaogui_standby_t* standby,
                            uint32_t now_ms,
                            int battery_percent,
+                           bool charging,
                            int minute_of_day,
                            const char* date_text,
                            int year,

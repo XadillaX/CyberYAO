@@ -7,6 +7,7 @@
 #include "bsp_audio.h"
 #include "bsp_battery.h"
 #include "bsp_display.h"
+#include "bsp_power.h"
 #include "esp_log.h"
 #include "esp_random.h"
 #include "esp_system.h"
@@ -524,6 +525,7 @@ static void tick(lv_timer_t* timer) {
       .model = &s_model,
       .now_ms = now_ms(),
       .battery_percent = s_battery_percent,
+      .charging = bsp_power_is_charging(),
       .standby = s_standby_active,
       .minute_of_day = minute_of_day,
       .date_text = date_text,
@@ -656,6 +658,7 @@ esp_err_t yaogui_app_start(void) {
       .model = &s_model,
       .now_ms = now_ms(),
       .battery_percent = s_battery_percent,
+      .charging = bsp_power_is_charging(),
       .standby = true,
       .minute_of_day = minute_of_day,
       .date_text = date_text,

@@ -279,23 +279,42 @@ def write_images(output_dir: Path) -> None:
     source.putalpha(source.getchannel("A").filter(ImageFilter.GaussianBlur(0.65)))
     background = Image.new("RGBA", source.size, "#e8d7b4")
     background.alpha_composite(source)
-    table_data = rgb565(background)
+    # 八卦盘：从 RGB565 真彩改为 I8 索引色，省约一半 Flash。合成后已不透明，
+    # indexed8_shared 的 0 号透明槽用不到，255 色足够承载盘面层次。
+    table_indexed = indexed8_shared([background])
     table_text = '#include "yaogui_table_image.h"\n\n'
-    table_text += image_descriptor("yaogui_table_image", table_data, 214, 214, "RGB565")
+    table_text += image_descriptor(
+        "yaogui_table_image", table_indexed[0], 214, 214, "I8"
+    )
     (output_dir / "yaogui_table_image.c").write_text(table_text, encoding="utf-8")
 
     standby_dir = ASSETS / "images" / "standby"
+    # 日晷三层：从 ARGB8888 改为 I8 索引色（三层共享同一 255 色调色板），
+    # 省约 267KB Flash。index 0 保留透明，层间叠加边缘保持干净。
+    sundial_specs = (
+        ("yaogui_sundial_base", "day-sundial-base.png"),
+        ("yaogui_sundial_face", "day-sundial-face.png"),
+        ("yaogui_sundial_gnomon", "day-sundial-gnomon.png"),
+    )
+    sundial_images = [
+        Image.open(standby_dir / filename).convert("RGBA").resize(
+            (167, 184), Image.Resampling.NEAREST
+        )
+        for _, filename in sundial_specs
+    ]
+    sundial_indexed = indexed8_shared(sundial_images)
+    standby_text = '#include "yaogui_standby_images.h"\n\n'
+    for (symbol, _), data in zip(sundial_specs, sundial_indexed):
+        standby_text += image_descriptor(symbol, data, 167, 184, "I8")
+        standby_text += "\n"
+
     standby_specs = (
-        ("yaogui_sundial_base", "day-sundial-base.png", (167, 184)),
-        ("yaogui_sundial_face", "day-sundial-face.png", (167, 184)),
-        ("yaogui_sundial_gnomon", "day-sundial-gnomon.png", (167, 184)),
         ("yaogui_clep_pot_ri", "night-clep-pot-ri.png", (30, 27)),
         ("yaogui_clep_pot_yue", "night-clep-pot-yue.png", (33, 27)),
         ("yaogui_clep_pot_xing", "night-clep-pot-xing.png", (34, 24)),
         ("yaogui_clep_pot_shou", "night-clep-pot-shou.png", (39, 40)),
         ("yaogui_clep_arrow", "night-clepsydra-arrow.png", (11, 84)),
     )
-    standby_text = '#include "yaogui_standby_images.h"\n\n'
     for symbol, filename, size in standby_specs:
         image = Image.open(standby_dir / filename).convert("RGBA")
         image = image.resize(size, Image.Resampling.NEAREST)

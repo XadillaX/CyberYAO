@@ -4,6 +4,12 @@
 
 # Changelog
 
+## v1.2.5 - 2026-10-04
+
+- The standby status bar now shows a USB charging indicator. When the device is connected to a host over USB, the battery glyph fills solid and reverse-cuts a lightning bolt in the background color, so the icon stays within its original width and the percentage beside it remains visible. Detection relies on the USB-Serial/JTAG host link, so a wall charger or power bank (data lines idle) is not reported as charging. The battery percentage baseline was nudged down two pixels to line up with the battery glyph.
+- Converted the large standby and board artwork from true color to 256-color indexed (I8) assets: the eight-trigram board drops from RGB565 to I8, and the three sundial layers share a single palette. This trims about 311 KB of flash with no visible banding in simulator review, leaving more headroom in the factory app partition.
+- Added a review-ready design document for the upcoming multi-credential Wi-Fi provisioning upgrade (array-backed NVS store, signal-aware best-candidate reconnect, and a richer portal with saved-network management). No runtime behavior changes yet; implementation follows after review.
+
 ## v1.2.4 - 2026-09-28
 
 - Reworked the phone reading page to interpret with the professional `liuyao-divination` Skill by default: the toggle is on out of the box, the generated prompt asks Trae to use (and, if needed, install) the Skill and to output the report following the Skill's own HTML scheme. The switch copy no longer asks the user to install anything by hand. All prompt handoffs now target Trae instead of TraeWork.
